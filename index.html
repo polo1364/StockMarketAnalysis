@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 華爾街分析師</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 自定義動畫 */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        
+        /* 台灣股市顏色習慣：紅漲綠跌 (可依個人習慣修改) */
+        .stock-up { color: #ef4444; }   /* 紅色 */
+        .stock-down { color: #22c55e; } /* 綠色 */
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans min-h-screen flex flex-col items-center p-4 md:p-8">
+
+    <div id="key-modal" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-slate-800 p-8 rounded-2xl w-full max-w-md border border-slate-700 shadow-2xl">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-400 text-3xl">
+                    <i class="fa-solid fa-key"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white">啟動 AI 分析師</h2>
+                <p class="text-slate-400 text-sm mt-2">請輸入您的 Google Gemini API Key</p>
+            </div>
+            <input type="password" id="api-key-input" class="w-full bg-slate-900 border border-slate-600 p-4 rounded-xl mb-4 text-white focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="貼上 API Key (AIzaSy...)">
+            <button onclick="saveKey()" class="w-full bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-xl font-bold transition shadow-lg shadow-blue-500/30">
+                開始連線
+            </button>
+            <p class="text-center mt-4 text-xs text-slate-500">Key 僅儲存於您的瀏覽器中，安全無虞。</p>
+        </div>
+    </div>
+
+    <header class="w-full max-w-4xl flex justify-between items-center mb-8 pb-6 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-white">AI Stock Analyst</h1>
+                <p class="text-xs text-slate-500">Powered by Yahoo Finance & Gemini</p>
+            </div>
+        </div>
+        <button onclick="showModal()" class="text-slate-500 hover:text-white transition text-sm">
+            <i class="fa-solid fa-gear mr-1"></i> 設定 Key
+        </button>
+    </header>
+
+    <main class="w-full max-w-4xl flex-1 flex flex-col gap-6">
+        
+        <div class="bg-slate-800 p-2 rounded-2xl flex flex-col md:flex-row gap-2 shadow-lg border border-slate-700">
+            <div class="flex-1 relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
+                <input id="ticker-input" type="text" placeholder="輸入代號 (如 2330, NVDA, TSLA)" 
+                    class="w-full bg-slate-900/50 border-none rounded-xl pl-12 pr-4 py-4 text-white placeholder-slate-500 focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition uppercase"
+                    onkeypress="if(event.key==='Enter') analyzeStock()">
+            </div>
+            
+            <select id="style-select" class="bg-slate-900/50 text-white px-6 py-4 rounded-xl border-none outline-none focus:bg-slate-900 cursor-pointer hover:bg-slate-900 transition">
+                <option value="價值投資">💎 價值投資 (巴菲特)</option>
+                <option value="短線當沖">⚡ 短線當沖 (技術面)</option>
+                <option value="成長型投資">🚀 成長型投資 (科技股)</option>
+                <option value="保守存股">🛡️ 保守存股 (領股息)</option>
+            </select>
+            
+            <button onclick="analyzeStock()" id="analyze-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-bold transition shadow-lg shadow-blue-600/20 whitespace-nowrap flex items-center justify-center gap-2">
+                <span>AI 分析</span> <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </button>
+        </div>
+
+        <div id="loading" class="hidden py-20 text-center">
+            <div class="inline-block w-16 h-16 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+            <p class="text-slate-400 animate-pulse">正在連線 Yahoo Finance 抓取報價...</p>
+            <p class="text-slate-500 text-sm mt-1">Gemini 正在閱讀財報與新聞</p>
+        </div>
+
+        <div id="result-area" class="hidden flex flex-col gap-6">
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 md:col-span-2 flex justify-between items-center relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                    <div>
+                        <h2 id="stock-name" class="text-2xl font-bold text-white mb-1">--</h2>
+                        <div class="flex items-center gap-2 text-sm text-slate-400">
+                            <span class="bg-slate-700 px-2 py-0.5 rounded text-xs">即時行情</span>
+                            <span id="stock-pe">PE: --</span>
+                        </div>
+                    </div>
+                    <div class="text-right z-10">
+                        <div id="stock-price" class="text-4xl font-mono font-bold text-white tracking-tighter">--</div>
+                        <div id="stock-change" class="text-lg font-bold flex items-center justify-end gap-1">
+                            <span>--%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">AI Recommendation</p>
+                    <div id="ai-action" class="text-3xl font-black text-white mb-2">--</div>
+                    <div id="risk-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300">
+                        Risk: --
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in">
+                <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                    <h3 class="text-blue-400 font-bold mb-2 flex items-center gap-2">
+                        <i class="fa-regular fa-lightbulb"></i> 市場總結
+                    </h3>
+                    <p id="ai-summary" class="text-lg text-slate-200 leading-relaxed italic">...</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2">
+                    <div class="p-6 border-r border-slate-700 border-b md:border-b-0 border-slate-700/50">
+                        <h4 class="text-green-400 font-bold mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-arrow-trend-up"></i> 看多訊號 (Bullish)
+                        </h4>
+                        <ul id="bull-list" class="space-y-3 text-sm text-slate-300"></ul>
+                    </div>
+                    <div class="p-6">
+                        <h4 class="text-red-400 font-bold mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i> 風險警示 (Bearish)
+                        </h4>
+                        <ul id="bear-list" class="space-y-3 text-sm text-slate-300"></ul>
+                    </div>
+                </div>
+
+                <div class="p-6 bg-slate-900/30 border-t border-slate-700">
+                    <h4 class="text-slate-400 text-xs font-bold uppercase mb-3 tracking-wider">Detailed Analysis</h4>
+                    <p id="ai-analysis" class="text-slate-300 leading-7 text-sm text-justify">...</p>
+                </div>
+            </div>
+
+            <p class="text-center text-xs text-slate-600 pb-8">
+                Disclaimer: AI 分析僅供參考，不代表投資建議。股市數據由 Yahoo Finance 提供，可能有延遲。
+            </p>
+        </div>
+
+    </main>
+
+    <script>
+        // --- 1. 狀態與初始化 ---
+        let apiKey = localStorage.getItem('gemini_api_key');
+        
+        // 檢查 Key 是否存在
+        if (apiKey) {
+            document.getElementById('key-modal').classList.add('hidden');
+        }
+
+        function showModal() {
+            document.getElementById('key-modal').classList.remove('hidden');
+        }
+
+        function saveKey() {
+            const input = document.getElementById('api-key-input');
+            const val = input.value.trim();
+            if (val) {
+                apiKey = val;
+                localStorage.setItem('gemini_api_key', apiKey);
+                document.getElementById('key-modal').classList.add('hidden');
+            } else {
+                alert("請輸入 API Key");
+            }
+        }
+
+        // --- 2. 核心功能：分析股票 ---
+        async function analyzeStock() {
+            const ticker = document.getElementById('ticker-input').value.trim();
+            const style = document.getElementById('style-select').value;
+            
+            if (!ticker) {
+                alert("請輸入股票代號！");
+                return;
+            }
+
+            // UI 狀態切換
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('result-area').classList.add('hidden');
+            document.getElementById('analyze-btn').disabled = true;
+            document.getElementById('analyze-btn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 分析中...';
+
+            try {
+                // 發送請求到後端 (server.js)
+                const res = await fetch('http://localhost:3000/api/analyze', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey 
+                    },
+                    body: JSON.stringify({ ticker, style })
+                });
+
+                // 處理 401 錯誤 (Key 無效)
+                if (res.status === 401) {
+                    alert("API Key 無效或過期，請重新設定。");
+                    showModal();
+                    return;
+                }
+
+                const data = await res.json();
+                
+                // 處理找不到股票的情況
+                if (data.analysis && data.analysis.includes("找不到")) {
+                    alert(data.analysis);
+                    return;
+                }
+
+                renderData(data);
+
+            } catch (error) {
+                console.error(error);
+                alert("連線失敗，請確認後端伺服器 (node server.js) 是否已啟動。");
+            } finally {
+                // 恢復按鈕狀態
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('analyze-btn').disabled = false;
+                document.getElementById('analyze-btn').innerHTML = '<span>AI 分析</span> <i class="fa-solid fa-wand-magic-sparkles"></i>';
+            }
+        }
+
+        // --- 3. 渲染畫面 ---
+        function renderData(data) {
+            document.getElementById('result-area').classList.remove('hidden');
+            const m = data.market_data;
+
+            // --- A. 填寫市場數據 ---
+            document.getElementById('stock-name').innerText = m.name;
+            // 處理小數點顯示
+            document.getElementById('stock-price').innerText = m.price.toLocaleString(); 
+            document.getElementById('stock-pe').innerText = `PE: ${m.pe}`;
+
+            // 處理漲跌顏色 (Yahoo 回傳的是字串帶 %，先判斷正負)
+            const changeStr = m.change || "0%";
+            const isUp = !changeStr.includes('-'); // 沒負號就是漲
+            const changeEl = document.getElementById('stock-change');
+            
+            changeEl.innerText = changeStr;
+            // 套用台灣習慣：紅漲綠跌 (若要美式，請互換 class)
+            if (isUp) {
+                changeEl.className = "text-lg font-bold flex items-center justify-end gap-1 stock-up";
+                changeEl.innerHTML += ' <i class="fa-solid fa-caret-up"></i>';
+            } else {
+                changeEl.className = "text-lg font-bold flex items-center justify-end gap-1 stock-down";
+                changeEl.innerHTML += ' <i class="fa-solid fa-caret-down"></i>';
+            }
+
+            // --- B. 填寫 AI 分析 ---
+            document.getElementById('ai-summary').innerText = data.summary;
+            document.getElementById('ai-analysis').innerText = data.analysis;
+
+            // 買賣建議 Badge 樣式
+            const actionEl = document.getElementById('ai-action');
+            const actionText = data.action?.toUpperCase() || "HOLD";
+            actionEl.innerText = actionText;
+            
+            if (actionText.includes("BUY")) actionEl.className = "text-3xl font-black text-red-500 mb-2 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]"; // 買進亮紅
+            else if (actionText.includes("SELL")) actionEl.className = "text-3xl font-black text-green-500 mb-2"; // 賣出綠色
+            else actionEl.className = "text-3xl font-black text-yellow-500 mb-2"; // 觀望黃色
+
+            // 風險標籤
+            const riskEl = document.getElementById('risk-badge');
+            riskEl.innerText = `Risk: ${data.risk_level}`;
+            if (data.risk_level === 'High') riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-900/50 text-red-300 border border-red-700";
+            else if (data.risk_level === 'Low') riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-green-900/50 text-green-300 border border-green-700";
+            else riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-yellow-900/50 text-yellow-300 border border-yellow-700";
+
+            // 清單
+            document.getElementById('bull-list').innerHTML = data.bullish_points.map(p => `<li class="flex gap-2"><i class="fa-solid fa-check text-green-500 mt-1 shrink-0"></i> <span>${p}</span></li>`).join('');
+            document.getElementById('bear-list').innerHTML = data.bearish_points.map(p => `<li class="flex gap-2"><i class="fa-solid fa-triangle-exclamation text-red-500 mt-1 shrink-0"></i> <span>${p}</span></li>`).join('');
+        }
+    </script>
+</body>
+</html>
