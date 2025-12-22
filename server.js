@@ -31,60 +31,103 @@ console.log('yahoo-finance2 初始化完成');
 console.log('类型:', typeof yahooFinance);
 console.log('可用方法:', Object.keys(yahooFinance || {}));
 
-// 备用：使用 fetch 直接调用 Yahoo Finance API
+// 获取股票数据的函数（使用多种数据源）
 async function fetchStockData(ticker) {
-    // 首先尝试使用 yahoo-finance2
+    // 处理台股代号（添加 .TW 或 .TWO 后缀）
+    let symbol = ticker.toUpperCase();
+    if (/^\d{4}$/.test(symbol)) {
+        // 如果是4位数字，可能是台股
+        symbol = symbol + '.TW';
+    }
+    
+    // 方案 1: 尝试 yahoo-finance2 库
     if (yahooFinance && typeof yahooFinance.quote === 'function') {
         try {
-            const quote = await yahooFinance.quote(ticker);
+            console.log('尝试 yahoo-finance2...');
+            const quote = await yahooFinance.quote(symbol);
             if (quote && quote.regularMarketPrice) {
+                console.log('yahoo-finance2 成功');
                 return quote;
             }
         } catch (err) {
-            console.error('yahoo-finance2 请求失败:', err.message);
+            console.error('yahoo-finance2 失败:', err.message);
         }
     }
     
-    // 备用方案：直接调用 Yahoo Finance API
-    console.log('尝试备用方案...');
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
-    
+    // 方案 2: Yahoo Finance Chart API (通常不需要认证)
     try {
-        const response = await fetch(url, {
+        console.log('尝试 Yahoo Chart API...');
+        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+        
+        const chartResponse = await fetch(chartUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Accept-Language': 'en-US,en;q=0.9'
             }
         });
         
-        if (!response.ok) {
-            throw new Error(`Yahoo API 返回 ${response.status}`);
+        if (chartResponse.ok) {
+            const chartData = await chartResponse.json();
+            const result = chartData?.chart?.result?.[0];
+            const meta = result?.meta;
+            
+            if (meta && meta.regularMarketPrice) {
+                console.log('Yahoo Chart API 成功');
+                return {
+                    longName: meta.longName || meta.shortName || ticker,
+                    shortName: meta.shortName || ticker,
+                    regularMarketPrice: meta.regularMarketPrice,
+                    regularMarketChangePercent: meta.regularMarketPrice && meta.chartPreviousClose 
+                        ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
+                        : 0,
+                    trailingPE: null,
+                    marketCap: null,
+                    regularMarketVolume: meta.regularMarketVolume,
+                    regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose,
+                    regularMarketDayHigh: meta.regularMarketDayHigh,
+                    regularMarketDayLow: meta.regularMarketDayLow,
+                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow
+                };
+            }
         }
-        
-        const data = await response.json();
-        
-        if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result.length > 0) {
-            const result = data.quoteResponse.result[0];
-            return {
-                longName: result.longName || result.shortName || ticker,
-                shortName: result.shortName || ticker,
-                regularMarketPrice: result.regularMarketPrice,
-                regularMarketChangePercent: result.regularMarketChangePercent,
-                trailingPE: result.trailingPE,
-                marketCap: result.marketCap,
-                regularMarketVolume: result.regularMarketVolume,
-                regularMarketPreviousClose: result.regularMarketPreviousClose,
-                regularMarketDayHigh: result.regularMarketDayHigh,
-                regularMarketDayLow: result.regularMarketDayLow,
-                fiftyTwoWeekHigh: result.fiftyTwoWeekHigh,
-                fiftyTwoWeekLow: result.fiftyTwoWeekLow
-            };
-        }
-        
-        throw new Error('未找到股票数据');
     } catch (err) {
-        console.error('备用方案也失败:', err.message);
-        throw err;
+        console.error('Yahoo Chart API 失败:', err.message);
     }
+    
+    // 方案 3: 使用 Finnhub 免费 API（不需要 API Key 的基本功能）
+    try {
+        console.log('尝试 Finnhub API...');
+        // Finnhub 需要 API Key，这里使用演示数据作为后备
+        throw new Error('跳过 Finnhub，使用演示数据');
+    } catch (err) {
+        console.log('Finnhub 跳过');
+    }
+    
+    // 方案 4: 返回模拟数据（用于演示）
+    console.log('所有 API 都失败，返回演示数据...');
+    
+    // 根据股票代号生成一致的演示数据
+    const hash = ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const basePrice = (hash % 900) + 100; // 100-1000 范围的价格
+    const changePercent = ((hash % 20) - 10) / 10; // -1% 到 +1% 的变化
+    
+    return {
+        longName: `${ticker.toUpperCase()} (演示數據)`,
+        shortName: ticker.toUpperCase(),
+        regularMarketPrice: basePrice,
+        regularMarketChangePercent: changePercent,
+        trailingPE: (hash % 30) + 10,
+        marketCap: basePrice * 1000000000,
+        regularMarketVolume: (hash % 10000000) + 1000000,
+        regularMarketPreviousClose: basePrice * (1 - changePercent / 100),
+        regularMarketDayHigh: basePrice * 1.02,
+        regularMarketDayLow: basePrice * 0.98,
+        fiftyTwoWeekHigh: basePrice * 1.3,
+        fiftyTwoWeekLow: basePrice * 0.7,
+        _isDemo: true // 标记为演示数据
+    };
 }
 
 const app = express();
@@ -129,6 +172,7 @@ app.post('/api/analyze', async (req, res) => {
         }
 
         // 提取市场数据
+        const isDemo = quote._isDemo === true;
         const marketData = {
             name: quote.longName || quote.shortName || ticker,
             price: quote.regularMarketPrice || 0,
@@ -142,8 +186,13 @@ app.post('/api/analyze', async (req, res) => {
             dayHigh: quote.regularMarketDayHigh || 0,
             dayLow: quote.regularMarketDayLow || 0,
             fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || 0,
-            fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0
+            fiftyTwoWeekLow: quote.fiftyTwoWeekLow || 0,
+            isDemo: isDemo
         };
+        
+        if (isDemo) {
+            console.log('注意：使用演示數據');
+        }
 
         // --- 2. 使用 Gemini AI 进行分析 ---
         console.log(`正在使用 Gemini AI 分析股票...`);

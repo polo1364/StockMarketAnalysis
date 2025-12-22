@@ -259,6 +259,11 @@
             // 處理小數點顯示
             document.getElementById('stock-price').innerText = m.price.toLocaleString(); 
             document.getElementById('stock-pe').innerText = `PE: ${m.pe}`;
+            
+            // 如果是演示數據，顯示提示
+            if (m.isDemo) {
+                document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
+            }
 
             // 處理漲跌顏色 (Yahoo 回傳的是字串帶 %，先判斷正負)
             const changeStr = m.change || "0%";
