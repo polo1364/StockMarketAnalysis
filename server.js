@@ -140,16 +140,35 @@ app.use(express.json());
 // 请求日志中间件（用于调试）
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    console.log('请求头:', JSON.stringify(req.headers));
     next();
 });
 
 // 测试端点
 app.get('/api/test', (req, res) => {
+    console.log('测试端点被调用');
     res.json({ status: 'ok', message: 'API 正常運行', time: new Date().toISOString() });
+});
+
+// 列出所有路由的端点（用于调试）
+app.get('/api/routes', (req, res) => {
+    const routes = [];
+    app._router.stack.forEach((middleware) => {
+        if (middleware.route) {
+            routes.push({
+                path: middleware.route.path,
+                methods: Object.keys(middleware.route.methods)
+            });
+        }
+    });
+    res.json({ routes, message: '当前注册的路由' });
 });
 
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
+    console.log('=== POST /api/analyze 被调用 ===');
+    console.log('请求体:', JSON.stringify(req.body));
+    console.log('请求头 x-api-key:', req.headers['x-api-key'] ? '存在' : '不存在');
     const { ticker, style } = req.body;
     const apiKey = req.headers['x-api-key'];
 
@@ -303,19 +322,37 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: '伺服器運行中' });
 });
 
-// 静态文件服务（放在 API 路由之后）
-app.use(express.static('.'));
+// 静态文件服务（放在 API 路由之后，排除 /api 路径）
+app.use((req, res, next) => {
+    // 如果是 API 请求，跳过静态文件服务
+    if (req.path.startsWith('/api')) {
+        return next();
+    }
+    express.static('.')(req, res, next);
+});
 
-// 所有其他请求返回 index.html（SPA 支持）
+// 所有其他 GET 请求返回 index.html（SPA 支持）
 app.get('*', (req, res) => {
+    // 确保不拦截 API 请求
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API 端点不存在' });
+    }
     res.sendFile('index.html', { root: '.' });
 });
 
 // 啟動伺服器
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 伺服器已啟動！`);
+    console.log(`📊 端口: ${PORT}`);
     console.log(`📊 前端網頁: http://localhost:${PORT}`);
     console.log(`🔌 API 端點: http://localhost:${PORT}/api/analyze`);
-    console.log(`🧪 測試端點: http://localhost:${PORT}/api/test\n`);
+    console.log(`🧪 測試端點: http://localhost:${PORT}/api/test`);
+    console.log(`📋 路由列表: http://localhost:${PORT}/api/routes`);
+    console.log(`\n已註冊的路由:`);
+    console.log(`  - GET  /api/test`);
+    console.log(`  - GET  /api/routes`);
+    console.log(`  - POST /api/analyze`);
+    console.log(`  - GET  /health`);
+    console.log(`  - GET  /* (静态文件)\n`);
 });
 
