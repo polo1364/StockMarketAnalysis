@@ -1,7 +1,29 @@
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const yahooFinance = require('yahoo-finance2');
+
+// yahoo-finance2 v3 导入和初始化
+const YahooFinance = require('yahoo-finance2');
+let yahooFinance;
+
+// 尝试不同的初始化方式
+if (typeof YahooFinance === 'function') {
+    // 如果是类，创建实例
+    yahooFinance = new YahooFinance();
+} else if (YahooFinance.default && typeof YahooFinance.default === 'function') {
+    // 如果有 default 导出且是类
+    yahooFinance = new YahooFinance.default();
+} else if (YahooFinance.default) {
+    // 如果有 default 导出
+    yahooFinance = YahooFinance.default;
+} else {
+    // 直接使用模块
+    yahooFinance = YahooFinance;
+}
+
+console.log('yahoo-finance2 初始化完成');
+console.log('类型:', typeof yahooFinance);
+console.log('可用方法:', Object.keys(yahooFinance || {}));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,6 +56,15 @@ app.post('/api/analyze', async (req, res) => {
     try {
         // --- 1. 从 Yahoo Finance 获取股票数据 ---
         console.log(`正在获取股票数据: ${ticker}`);
+        
+        // 检查 yahooFinance 对象
+        if (!yahooFinance || typeof yahooFinance.quote !== 'function') {
+            console.error('yahooFinance.quote 不可用');
+            console.error('yahooFinance 类型:', typeof yahooFinance);
+            console.error('可用方法:', yahooFinance ? Object.keys(yahooFinance) : 'null');
+            throw new Error('yahoo-finance2 API 初始化失败，请检查模块导入');
+        }
+        
         const quote = await yahooFinance.quote(ticker);
         
         if (!quote || !quote.regularMarketPrice) {
