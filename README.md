@@ -119,19 +119,20 @@ npm run dev
 
 項目已包含 `railway.json` 配置文件，Railway 會自動使用：
 - 構建器：NIXPACKS（自動檢測）
+- 構建命令：`npm install --omit=dev`（使用新的 npm 語法，避免警告）
 - 啟動命令：`npm start`
 - 重啟策略：失敗時自動重啟
+
+**注意**：配置已更新為使用 `--omit=dev` 替代舊的 `--production` 標誌，這符合 npm v7+ 的新標準。
 
 ### 常見問題
 
 **Q: 部署時看到 "npm warn config production Use `--omit=dev` instead." 警告？**
 
-A: 這是一個無害的警告，不會導致構建失敗。這是因為 Railway 使用了舊的 `--production` 標誌，而新版本的 npm 建議使用 `--omit=dev`。你可以安全地忽略這個警告，應用程式會正常運行。
-
-如果這個警告被標記為錯誤級別，請檢查：
-1. 構建是否真的失敗了（查看完整的構建日誌）
-2. 應用程式是否正常運行（訪問 Railway 提供的 URL）
-3. 如果構建成功但顯示警告，可以安全地忽略它
+A: 這個問題已經在 `railway.json` 中修復。配置現在使用 `npm install --omit=dev` 而不是舊的 `--production` 標誌。如果你仍然看到這個警告，請確保：
+1. 已提交最新的 `railway.json` 文件
+2. Railway 已重新部署（會自動觸發）
+3. 如果問題持續，請檢查 Railway 的構建日誌
 
 ## 注意事項
 
