@@ -33,76 +33,122 @@ console.log('可用方法:', Object.keys(yahooFinance || {}));
 
 // 获取股票数据的函数（使用多种数据源）
 async function fetchStockData(ticker) {
-    // 处理台股代号（添加 .TW 或 .TWO 后缀）
-    let symbol = ticker.toUpperCase();
-    if (/^\d{4}$/.test(symbol)) {
-        // 如果是4位数字，可能是台股
-        symbol = symbol + '.TW';
+    // 处理台股代号（支持4位和5位数字）
+    let symbolsToTry = [ticker.toUpperCase()];
+    
+    // 如果是纯数字，尝试添加台股后缀
+    if (/^\d{4,5}$/.test(ticker)) {
+        // 4位或5位数字，尝试 .TW 和 .TWO
+        symbolsToTry.push(ticker + '.TW');
+        symbolsToTry.push(ticker + '.TWO');
     }
     
     // 方案 1: 尝试 yahoo-finance2 库
     if (yahooFinance && typeof yahooFinance.quote === 'function') {
-        try {
-            console.log('尝试 yahoo-finance2...');
-            const quote = await yahooFinance.quote(symbol);
-            if (quote && quote.regularMarketPrice) {
-                console.log('yahoo-finance2 成功');
-                return quote;
+        for (const symbol of symbolsToTry) {
+            try {
+                console.log(`尝试 yahoo-finance2: ${symbol}`);
+                const quote = await yahooFinance.quote(symbol);
+                if (quote && quote.regularMarketPrice) {
+                    console.log(`yahoo-finance2 成功: ${symbol}`);
+                    return quote;
+                }
+            } catch (err) {
+                console.error(`yahoo-finance2 失败 (${symbol}):`, err.message);
             }
-        } catch (err) {
-            console.error('yahoo-finance2 失败:', err.message);
         }
     }
     
     // 方案 2: Yahoo Finance Chart API (通常不需要认证)
-    try {
-        console.log('尝试 Yahoo Chart API...');
-        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-        
-        const chartResponse = await fetch(chartUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Accept-Language': 'en-US,en;q=0.9'
-            }
-        });
-        
-        if (chartResponse.ok) {
-            const chartData = await chartResponse.json();
-            const result = chartData?.chart?.result?.[0];
-            const meta = result?.meta;
+    for (const symbol of symbolsToTry) {
+        try {
+            console.log(`尝试 Yahoo Chart API: ${symbol}`);
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
             
-            if (meta && meta.regularMarketPrice) {
-                console.log('Yahoo Chart API 成功');
-                return {
-                    longName: meta.longName || meta.shortName || ticker,
-                    shortName: meta.shortName || ticker,
-                    regularMarketPrice: meta.regularMarketPrice,
-                    regularMarketChangePercent: meta.regularMarketPrice && meta.chartPreviousClose 
+            const chartResponse = await fetch(chartUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://finance.yahoo.com/'
+                }
+            });
+            
+            if (chartResponse.ok) {
+                const chartData = await chartResponse.json();
+                const result = chartData?.chart?.result?.[0];
+                const meta = result?.meta;
+                
+                if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
+                    console.log(`Yahoo Chart API 成功: ${symbol}`);
+                    const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
                         ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
-                        : 0,
-                    trailingPE: null,
-                    marketCap: null,
-                    regularMarketVolume: meta.regularMarketVolume,
-                    regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose,
-                    regularMarketDayHigh: meta.regularMarketDayHigh,
-                    regularMarketDayLow: meta.regularMarketDayLow,
-                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow
-                };
+                        : (meta.regularMarketChangePercent || 0);
+                    
+                    return {
+                        longName: meta.longName || meta.shortName || ticker,
+                        shortName: meta.shortName || meta.symbol || ticker,
+                        regularMarketPrice: meta.regularMarketPrice,
+                        regularMarketChangePercent: changePercent,
+                        trailingPE: meta.trailingPE || null,
+                        marketCap: meta.marketCap || null,
+                        regularMarketVolume: meta.regularMarketVolume || 0,
+                        regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
+                        regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
+                        regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
+                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
+                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
+                    };
+                } else {
+                    console.log(`Yahoo Chart API 返回数据但无价格: ${symbol}`);
+                }
+            } else {
+                console.log(`Yahoo Chart API 返回 ${chartResponse.status}: ${symbol}`);
             }
+        } catch (err) {
+            console.error(`Yahoo Chart API 失败 (${symbol}):`, err.message);
         }
-    } catch (err) {
-        console.error('Yahoo Chart API 失败:', err.message);
     }
     
-    // 方案 3: 使用 Finnhub 免费 API（不需要 API Key 的基本功能）
-    try {
-        console.log('尝试 Finnhub API...');
-        // Finnhub 需要 API Key，这里使用演示数据作为后备
-        throw new Error('跳过 Finnhub，使用演示数据');
-    } catch (err) {
-        console.log('Finnhub 跳过');
+    // 方案 3: Yahoo Finance Quote Summary API
+    for (const symbol of symbolsToTry) {
+        try {
+            console.log(`尝试 Yahoo Quote Summary API: ${symbol}`);
+            const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryProfile,price,defaultKeyStatistics`;
+            
+            const quoteResponse = await fetch(quoteUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (quoteResponse.ok) {
+                const quoteData = await quoteResponse.json();
+                const price = quoteData?.quoteSummary?.result?.[0]?.price;
+                const profile = quoteData?.quoteSummary?.result?.[0]?.summaryProfile;
+                
+                if (price && price.regularMarketPrice) {
+                    console.log(`Yahoo Quote Summary API 成功: ${symbol}`);
+                    return {
+                        longName: profile?.longName || price.longName || price.shortName || ticker,
+                        shortName: price.shortName || ticker,
+                        regularMarketPrice: price.regularMarketPrice?.raw || price.regularMarketPrice,
+                        regularMarketChangePercent: price.regularMarketChangePercent?.raw || price.regularMarketChangePercent || 0,
+                        trailingPE: quoteData?.quoteSummary?.result?.[0]?.defaultKeyStatistics?.trailingPE?.raw || null,
+                        marketCap: price.marketCap?.raw || price.marketCap || null,
+                        regularMarketVolume: price.regularMarketVolume?.raw || price.regularMarketVolume || 0,
+                        regularMarketPreviousClose: price.regularMarketPreviousClose?.raw || price.regularMarketPreviousClose || price.regularMarketPrice,
+                        regularMarketDayHigh: price.regularMarketDayHigh?.raw || price.regularMarketDayHigh || price.regularMarketPrice,
+                        regularMarketDayLow: price.regularMarketDayLow?.raw || price.regularMarketDayLow || price.regularMarketPrice,
+                        fiftyTwoWeekHigh: price.fiftyTwoWeekHigh?.raw || price.fiftyTwoWeekHigh || price.regularMarketPrice,
+                        fiftyTwoWeekLow: price.fiftyTwoWeekLow?.raw || price.fiftyTwoWeekLow || price.regularMarketPrice
+                    };
+                }
+            }
+        } catch (err) {
+            console.error(`Yahoo Quote Summary API 失败 (${symbol}):`, err.message);
+        }
     }
     
     // 方案 4: 返回模拟数据（用于演示）
