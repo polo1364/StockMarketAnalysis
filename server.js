@@ -244,7 +244,9 @@ app.post('/api/analyze', async (req, res) => {
         // --- 2. 使用 Gemini AI 进行分析 ---
         console.log(`正在使用 Gemini AI 分析股票...`);
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+        
+        // 使用 gemini-2.5-flash 模型（最新版本，更快更强）
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
         // 构建提示词
         const prompt = `
