@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const yahooFinance = require('yahoo-finance2').default;
+const yahooFinance = require('yahoo-finance2');
 
 const app = express();
 const PORT = 3000;
@@ -131,14 +131,14 @@ app.post('/api/analyze', async (req, res) => {
         }
 
         // 處理 Yahoo Finance 錯誤
-        if (error.message && error.message.includes('Not Found')) {
+        if (error.message && (error.message.includes('Not Found') || error.message.includes('Invalid symbol'))) {
             return res.status(404).json({ 
                 analysis: `找不到股票代號 "${ticker}"，請確認代號是否正確。` 
             });
         }
 
         res.status(500).json({ 
-            error: '伺服器錯誤: ' + error.message 
+            error: '伺服器錯誤: ' + (error.message || '未知錯誤') 
         });
     }
 });
