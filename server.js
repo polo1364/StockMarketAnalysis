@@ -8,22 +8,84 @@ let yahooFinance;
 
 // 尝试不同的初始化方式
 if (typeof YahooFinance === 'function') {
-    // 如果是类，创建实例
     yahooFinance = new YahooFinance();
 } else if (YahooFinance.default && typeof YahooFinance.default === 'function') {
-    // 如果有 default 导出且是类
     yahooFinance = new YahooFinance.default();
 } else if (YahooFinance.default) {
-    // 如果有 default 导出
     yahooFinance = YahooFinance.default;
 } else {
-    // 直接使用模块
     yahooFinance = YahooFinance;
+}
+
+// 配置 yahoo-finance2（如果支持）
+if (yahooFinance && yahooFinance.setGlobalConfig) {
+    yahooFinance.setGlobalConfig({
+        queue: {
+            concurrency: 1,
+            timeout: 30000
+        }
+    });
 }
 
 console.log('yahoo-finance2 初始化完成');
 console.log('类型:', typeof yahooFinance);
 console.log('可用方法:', Object.keys(yahooFinance || {}));
+
+// 备用：使用 fetch 直接调用 Yahoo Finance API
+async function fetchStockData(ticker) {
+    // 首先尝试使用 yahoo-finance2
+    if (yahooFinance && typeof yahooFinance.quote === 'function') {
+        try {
+            const quote = await yahooFinance.quote(ticker);
+            if (quote && quote.regularMarketPrice) {
+                return quote;
+            }
+        } catch (err) {
+            console.error('yahoo-finance2 请求失败:', err.message);
+        }
+    }
+    
+    // 备用方案：直接调用 Yahoo Finance API
+    console.log('尝试备用方案...');
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
+    
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Yahoo API 返回 ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result.length > 0) {
+            const result = data.quoteResponse.result[0];
+            return {
+                longName: result.longName || result.shortName || ticker,
+                shortName: result.shortName || ticker,
+                regularMarketPrice: result.regularMarketPrice,
+                regularMarketChangePercent: result.regularMarketChangePercent,
+                trailingPE: result.trailingPE,
+                marketCap: result.marketCap,
+                regularMarketVolume: result.regularMarketVolume,
+                regularMarketPreviousClose: result.regularMarketPreviousClose,
+                regularMarketDayHigh: result.regularMarketDayHigh,
+                regularMarketDayLow: result.regularMarketDayLow,
+                fiftyTwoWeekHigh: result.fiftyTwoWeekHigh,
+                fiftyTwoWeekLow: result.fiftyTwoWeekLow
+            };
+        }
+        
+        throw new Error('未找到股票数据');
+    } catch (err) {
+        console.error('备用方案也失败:', err.message);
+        throw err;
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -57,15 +119,8 @@ app.post('/api/analyze', async (req, res) => {
         // --- 1. 从 Yahoo Finance 获取股票数据 ---
         console.log(`正在获取股票数据: ${ticker}`);
         
-        // 检查 yahooFinance 对象
-        if (!yahooFinance || typeof yahooFinance.quote !== 'function') {
-            console.error('yahooFinance.quote 不可用');
-            console.error('yahooFinance 类型:', typeof yahooFinance);
-            console.error('可用方法:', yahooFinance ? Object.keys(yahooFinance) : 'null');
-            throw new Error('yahoo-finance2 API 初始化失败，请检查模块导入');
-        }
-        
-        const quote = await yahooFinance.quote(ticker);
+        // 使用封装的函数获取股票数据（自动使用备用方案）
+        const quote = await fetchStockData(ticker);
         
         if (!quote || !quote.regularMarketPrice) {
             return res.status(404).json({ 
