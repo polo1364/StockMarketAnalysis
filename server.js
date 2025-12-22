@@ -98,34 +98,71 @@ async function fetchStockData(ticker) {
     // 处理台股代号（支持4位和5位数字）
     let symbolsToTry = [ticker.toUpperCase()];
     
-    // 如果是纯数字，尝试添加台股后缀
+    // 如果是纯数字，尝试添加台股后缀（优先尝试 .TW）
     if (/^\d{4,5}$/.test(ticker)) {
-        // 4位或5位数字，尝试 .TW 和 .TWO
+        // 4位或5位数字，优先尝试 .TW（更常见）
         symbolsToTry.push(ticker + '.TW');
         symbolsToTry.push(ticker + '.TWO');
     }
     
-    // 方案 1: 尝试 yahoo-finance2 库
-    if (yahooFinance && typeof yahooFinance.quote === 'function') {
-        for (const symbol of symbolsToTry) {
-            try {
-                console.log(`尝试 yahoo-finance2: ${symbol}`);
-                const quote = await yahooFinance.quote(symbol);
-                if (quote && quote.regularMarketPrice) {
-                    console.log(`yahoo-finance2 成功: ${symbol}`);
-                    return quote;
-                }
-            } catch (err) {
-                console.error(`yahoo-finance2 失败 (${symbol}):`, err.message);
-            }
-        }
-    }
+    // 方案 1: 尝试 yahoo-finance2 库（快速跳过，因为 Railway 上会失败）
+    // 跳过，因为 Railway 上总是失败
     
     // 方案 2: 使用 CORS 代理服务（Railway 网络受限时的首选方案）
+    // 只尝试最可能的符号，避免浪费时间
+    const primarySymbol = symbolsToTry[1] || symbolsToTry[0]; // 优先尝试 .TW
+    
+    try {
+        console.log(`尝试使用 CORS 代理: ${primarySymbol}`);
+        // 使用公共 CORS 代理
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${primarySymbol}?interval=1d&range=1d`)}`;
+        
+        const proxyResponse = await httpRequest(proxyUrl, {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (proxyResponse.ok) {
+            const chartData = await proxyResponse.json();
+            const result = chartData?.chart?.result?.[0];
+            const meta = result?.meta;
+            
+            if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
+                console.log(`✅ CORS 代理成功: ${primarySymbol}, 价格: ${meta.regularMarketPrice}`);
+                const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
+                    ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
+                    : (meta.regularMarketChangePercent || 0);
+                
+                // 优先使用中文名称（longName 通常是中文）
+                const stockName = meta.longName || meta.shortName || ticker;
+                
+                return {
+                    longName: stockName,
+                    shortName: meta.shortName || meta.symbol || ticker,
+                    regularMarketPrice: meta.regularMarketPrice,
+                    regularMarketChangePercent: changePercent,
+                    trailingPE: meta.trailingPE || null,
+                    marketCap: meta.marketCap || null,
+                    regularMarketVolume: meta.regularMarketVolume || 0,
+                    regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
+                    regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
+                    regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
+                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
+                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
+                };
+            }
+        }
+    } catch (err) {
+        console.error(`CORS 代理失败 (${primarySymbol}):`, err.message);
+    }
+    
+    // 如果主要符号失败，尝试其他符号
     for (const symbol of symbolsToTry) {
+        if (symbol === primarySymbol) continue; // 已经尝试过了
+        
         try {
             console.log(`尝试使用 CORS 代理: ${symbol}`);
-            // 使用公共 CORS 代理
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`)}`;
             
             const proxyResponse = await httpRequest(proxyUrl, {
@@ -145,7 +182,6 @@ async function fetchStockData(ticker) {
                         ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
                         : (meta.regularMarketChangePercent || 0);
                     
-                    // 优先使用中文名称（longName 通常是中文）
                     const stockName = meta.longName || meta.shortName || ticker;
                     
                     return {
@@ -169,183 +205,8 @@ async function fetchStockData(ticker) {
         }
     }
     
-    // 方案 2.5: Yahoo Finance Chart API (直接访问，Railway 上可能超时)
-    for (const symbol of symbolsToTry) {
-        try {
-            console.log(`尝试 Yahoo Chart API: ${symbol}`);
-            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-            
-            const chartResponse = await httpRequest(chartUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'application/json',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://finance.yahoo.com/'
-                }
-            });
-            
-            console.log(`Yahoo Chart API 响应状态: ${chartResponse.status} for ${symbol}`);
-            
-            if (chartResponse.ok) {
-                const chartData = await chartResponse.json();
-                console.log(`Yahoo Chart API 响应数据:`, JSON.stringify(chartData).substring(0, 500));
-                const result = chartData?.chart?.result?.[0];
-                const meta = result?.meta;
-                
-                if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
-                    console.log(`Yahoo Chart API 成功: ${symbol}, 价格: ${meta.regularMarketPrice}`);
-                    const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
-                        ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
-                        : (meta.regularMarketChangePercent || 0);
-                    
-                    // 优先使用中文名称（longName 通常是中文）
-                    const stockName = meta.longName || meta.shortName || ticker;
-                    
-                    return {
-                        longName: stockName,
-                        shortName: meta.shortName || meta.symbol || ticker,
-                        regularMarketPrice: meta.regularMarketPrice,
-                        regularMarketChangePercent: changePercent,
-                        trailingPE: meta.trailingPE || null,
-                        marketCap: meta.marketCap || null,
-                        regularMarketVolume: meta.regularMarketVolume || 0,
-                        regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
-                        regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
-                        regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
-                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
-                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
-                    };
-                } else {
-                    console.log(`Yahoo Chart API 返回数据但无价格: ${symbol}, meta:`, JSON.stringify(meta).substring(0, 200));
-                }
-            } else {
-                const errorText = await chartResponse.text().catch(() => '');
-                console.log(`Yahoo Chart API 返回 ${chartResponse.status}: ${symbol}, 错误: ${errorText.substring(0, 200)}`);
-            }
-        } catch (err) {
-            console.error(`Yahoo Chart API 失败 (${symbol}):`, err.message, err.stack);
-        }
-    }
-    
-    // 方案 2.5: Yahoo Finance 台湾站点 API
-    for (const symbol of symbolsToTry) {
-        try {
-            console.log(`尝试 Yahoo Finance TW API: ${symbol}`);
-            // 移除后缀，使用原始代码
-            const twSymbol = symbol.replace(/\.(TW|TWO)$/, '');
-            const twUrl = `https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.stockList;autoComplete=1;query=${encodeURIComponent(twSymbol)};region=TW;lang=zh-Hant-TW`;
-            
-            const twResponse = await httpRequest(twUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json',
-                    'Referer': 'https://tw.stock.yahoo.com/'
-                }
-            });
-            
-            if (twResponse.ok) {
-                const twData = await twResponse.json();
-                console.log(`Yahoo TW API 响应:`, JSON.stringify(twData).substring(0, 500));
-                // 这里需要根据实际 API 响应格式解析
-            }
-        } catch (err) {
-            console.error(`Yahoo Finance TW API 失败:`, err.message);
-        }
-    }
-    
-    // 方案 3: Yahoo Finance Quote Summary API
-    for (const symbol of symbolsToTry) {
-        try {
-            console.log(`尝试 Yahoo Quote Summary API: ${symbol}`);
-            const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryProfile,price,defaultKeyStatistics`;
-            
-            const quoteResponse = await httpRequest(quoteUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json'
-                }
-            });
-            
-            console.log(`Yahoo Quote Summary API 响应状态: ${quoteResponse.status} for ${symbol}`);
-            
-            if (quoteResponse.ok) {
-                const quoteData = await quoteResponse.json();
-                console.log(`Yahoo Quote Summary API 响应数据:`, JSON.stringify(quoteData).substring(0, 500));
-                const price = quoteData?.quoteSummary?.result?.[0]?.price;
-                const profile = quoteData?.quoteSummary?.result?.[0]?.summaryProfile;
-                
-                if (price && (price.regularMarketPrice || price.regularMarketPrice?.raw)) {
-                    const marketPrice = price.regularMarketPrice?.raw || price.regularMarketPrice;
-                    console.log(`Yahoo Quote Summary API 成功: ${symbol}, 价格: ${marketPrice}`);
-                    // 优先使用中文名称（longName 通常是中文）
-                    const stockName = profile?.longName || price.longName || price.shortName || ticker;
-                    
-                    return {
-                        longName: stockName,
-                        shortName: price.shortName || ticker,
-                        regularMarketPrice: marketPrice,
-                        regularMarketChangePercent: price.regularMarketChangePercent?.raw || price.regularMarketChangePercent || 0,
-                        trailingPE: quoteData?.quoteSummary?.result?.[0]?.defaultKeyStatistics?.trailingPE?.raw || null,
-                        marketCap: price.marketCap?.raw || price.marketCap || null,
-                        regularMarketVolume: price.regularMarketVolume?.raw || price.regularMarketVolume || 0,
-                        regularMarketPreviousClose: price.regularMarketPreviousClose?.raw || price.regularMarketPreviousClose || marketPrice,
-                        regularMarketDayHigh: price.regularMarketDayHigh?.raw || price.regularMarketDayHigh || marketPrice,
-                        regularMarketDayLow: price.regularMarketDayLow?.raw || price.regularMarketDayLow || marketPrice,
-                        fiftyTwoWeekHigh: price.fiftyTwoWeekHigh?.raw || price.fiftyTwoWeekHigh || marketPrice,
-                        fiftyTwoWeekLow: price.fiftyTwoWeekLow?.raw || price.fiftyTwoWeekLow || marketPrice
-                    };
-                } else {
-                    console.log(`Yahoo Quote Summary API 无价格数据: ${symbol}`);
-                }
-            } else {
-                const errorText = await quoteResponse.text().catch(() => '');
-                console.log(`Yahoo Quote Summary API 返回 ${quoteResponse.status}: ${symbol}, 错误: ${errorText.substring(0, 200)}`);
-            }
-        } catch (err) {
-            console.error(`Yahoo Quote Summary API 失败 (${symbol}):`, err.message, err.stack);
-        }
-    }
-    
-    // 方案 3.5: 直接使用 Yahoo Finance 快速报价（最简单的方法）
-    for (const symbol of symbolsToTry) {
-        try {
-            console.log(`尝试 Yahoo Finance 快速报价: ${symbol}`);
-            const quickUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=1&newsCount=0`;
-            
-            const quickResponse = await httpRequest(quickUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (quickResponse.ok) {
-                const quickData = await quickResponse.json();
-                const quote = quickData?.quotes?.[0];
-                if (quote && quote.regularMarketPrice) {
-                    console.log(`Yahoo 快速报价成功: ${symbol}`);
-                    return {
-                        longName: quote.longname || quote.shortname || ticker,
-                        shortName: quote.shortname || ticker,
-                        regularMarketPrice: quote.regularMarketPrice,
-                        regularMarketChangePercent: quote.regularMarketChangePercent || 0,
-                        trailingPE: null,
-                        marketCap: null,
-                        regularMarketVolume: quote.regularMarketVolume || 0,
-                        regularMarketPreviousClose: quote.regularMarketPreviousClose || quote.regularMarketPrice,
-                        regularMarketDayHigh: quote.regularMarketDayHigh || quote.regularMarketPrice,
-                        regularMarketDayLow: quote.regularMarketDayLow || quote.regularMarketPrice,
-                        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || quote.regularMarketPrice,
-                        fiftyTwoWeekLow: quote.fiftyTwoWeekLow || quote.regularMarketPrice
-                    };
-                }
-            }
-        } catch (err) {
-            console.error(`Yahoo 快速报价失败 (${symbol}):`, err.message);
-        }
-    }
-    
-    // 方案 5: 返回模拟数据（用于演示）
+    // 方案 3: 返回模拟数据（用于演示）
+    // 注意：Railway 无法直接访问 Yahoo Finance，所以跳过其他会超时的 API
     console.log('========================================');
     console.log(`所有 API 都失败，返回演示数据...`);
     console.log(`尝试的符号: ${symbolsToTry.join(', ')}`);
@@ -434,7 +295,7 @@ app.get('/api/routes', (req, res) => {
 });
 
 // 请求超时处理（Railway 可能有超时限制）
-const REQUEST_TIMEOUT = 55000; // 55 秒（Railway 通常是 60 秒）
+const REQUEST_TIMEOUT = 50000; // 50 秒（Railway 通常是 60 秒，留出缓冲）
 
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
@@ -442,25 +303,35 @@ app.post('/api/analyze', async (req, res) => {
     console.log('请求体:', JSON.stringify(req.body));
     console.log('请求头 x-api-key:', req.headers['x-api-key'] ? '存在' : '不存在');
     
-    // 设置超时
-    const timeoutId = setTimeout(() => {
-        if (!res.headersSent) {
-            console.error('请求超时');
-            res.status(504).json({ 
-                error: '請求超時，請稍後再試。股票數據獲取或 AI 分析時間過長。' 
-            });
-        }
-    }, REQUEST_TIMEOUT);
-    
-    // 清理超时器
-    const clearTimeoutOnFinish = () => {
-        clearTimeout(timeoutId);
-    };
-    
-    res.on('finish', clearTimeoutOnFinish);
-    res.on('close', clearTimeoutOnFinish);
     const { ticker, style } = req.body;
     const apiKey = req.headers['x-api-key'];
+    
+    // 设置超时（在验证之后）
+    let timeoutId;
+    const setupTimeout = () => {
+        timeoutId = setTimeout(() => {
+            if (!res.headersSent) {
+                console.error('请求超时');
+                res.status(504).json({ 
+                    error: '請求超時，請稍後再試。股票數據獲取或 AI 分析時間過長。' 
+                });
+            }
+        }, REQUEST_TIMEOUT);
+    };
+    
+    // 清理超时器
+    const clearTimeoutSafe = () => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+        }
+    };
+    
+    res.on('finish', clearTimeoutSafe);
+    res.on('close', clearTimeoutSafe);
+    
+    // 在验证通过后设置超时
+    setupTimeout();
 
     // 验证 API Key
     if (!apiKey) {
@@ -583,10 +454,10 @@ app.post('/api/analyze', async (req, res) => {
         }
 
         // --- 3. 返回結果 ---
-        clearTimeout(timeoutId);
+        clearTimeoutSafe();
         
         if (res.headersSent) {
-            console.warn('响应已发送，跳过');
+            console.warn('响应已发送，跳过（可能是超时处理已触发）');
             return;
         }
         
@@ -601,10 +472,10 @@ app.post('/api/analyze', async (req, res) => {
         });
 
     } catch (error) {
-        clearTimeout(timeoutId);
+        clearTimeoutSafe();
         
         if (res.headersSent) {
-            console.error('错误发生时响应已发送');
+            console.error('错误发生时响应已发送（可能是超时处理已触发）');
             return;
         }
         
