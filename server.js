@@ -145,8 +145,11 @@ async function fetchStockData(ticker) {
                         ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
                         : (meta.regularMarketChangePercent || 0);
                     
+                    // 优先使用中文名称（longName 通常是中文）
+                    const stockName = meta.longName || meta.shortName || ticker;
+                    
                     return {
-                        longName: meta.longName || meta.shortName || ticker,
+                        longName: stockName,
                         shortName: meta.shortName || meta.symbol || ticker,
                         regularMarketPrice: meta.regularMarketPrice,
                         regularMarketChangePercent: changePercent,
@@ -195,8 +198,11 @@ async function fetchStockData(ticker) {
                         ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
                         : (meta.regularMarketChangePercent || 0);
                     
+                    // 优先使用中文名称（longName 通常是中文）
+                    const stockName = meta.longName || meta.shortName || ticker;
+                    
                     return {
-                        longName: meta.longName || meta.shortName || ticker,
+                        longName: stockName,
                         shortName: meta.shortName || meta.symbol || ticker,
                         regularMarketPrice: meta.regularMarketPrice,
                         regularMarketChangePercent: changePercent,
@@ -271,8 +277,11 @@ async function fetchStockData(ticker) {
                 if (price && (price.regularMarketPrice || price.regularMarketPrice?.raw)) {
                     const marketPrice = price.regularMarketPrice?.raw || price.regularMarketPrice;
                     console.log(`Yahoo Quote Summary API 成功: ${symbol}, 价格: ${marketPrice}`);
+                    // 优先使用中文名称（longName 通常是中文）
+                    const stockName = profile?.longName || price.longName || price.shortName || ticker;
+                    
                     return {
-                        longName: profile?.longName || price.longName || price.shortName || ticker,
+                        longName: stockName,
                         shortName: price.shortName || ticker,
                         regularMarketPrice: marketPrice,
                         regularMarketChangePercent: price.regularMarketChangePercent?.raw || price.regularMarketChangePercent || 0,
@@ -484,34 +493,40 @@ app.post('/api/analyze', async (req, res) => {
         // 使用 gemini-2.5-flash 模型（最新版本，更快更强）
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        // 构建提示词
+        // 构建提示词（明确要求使用中文）
         const prompt = `
-你是一位專業的股票分析師。請根據以下股票數據，以「${style}」的投資風格進行分析。
+你是一位專業的股票分析師，請使用繁體中文進行分析（專業術語如 PE、ROE、EPS 等可保留英文縮寫）。
+
+請根據以下股票數據，以「${style}」的投資風格進行分析：
 
 股票代號: ${ticker}
 公司名稱: ${marketData.name}
-當前價格: $${marketData.price}
+當前價格: ${marketData.price}
 漲跌幅: ${marketData.change}
 本益比 (PE): ${marketData.pe}
-市值: $${marketData.marketCap.toLocaleString()}
+市值: ${marketData.marketCap.toLocaleString()}
 成交量: ${marketData.volume.toLocaleString()}
-前收盤價: $${marketData.previousClose}
-今日最高: $${marketData.dayHigh}
-今日最低: $${marketData.dayLow}
-52週最高: $${marketData.fiftyTwoWeekHigh}
-52週最低: $${marketData.fiftyTwoWeekLow}
+前收盤價: ${marketData.previousClose}
+今日最高: ${marketData.dayHigh}
+今日最低: ${marketData.dayLow}
+52週最高: ${marketData.fiftyTwoWeekHigh}
+52週最低: ${marketData.fiftyTwoWeekLow}
 
-請以 JSON 格式回覆，包含以下欄位：
+請以 JSON 格式回覆，所有內容都使用繁體中文（專業術語可保留英文縮寫），包含以下欄位：
 {
-  "summary": "簡短市場總結（1-2句話）",
-  "analysis": "詳細分析（3-5段）",
+  "summary": "簡短市場總結（1-2句話，使用繁體中文）",
+  "analysis": "詳細分析（3-5段，使用繁體中文，專業術語如 PE、ROE、EPS、PEG 等可保留英文縮寫）",
   "action": "BUY / SELL / HOLD",
   "risk_level": "Low / Medium / High",
-  "bullish_points": ["看多理由1", "看多理由2", "看多理由3"],
-  "bearish_points": ["風險警示1", "風險警示2", "風險警示3"]
+  "bullish_points": ["看多理由1（繁體中文）", "看多理由2（繁體中文）", "看多理由3（繁體中文）"],
+  "bearish_points": ["風險警示1（繁體中文）", "風險警示2（繁體中文）", "風險警示3（繁體中文）"]
 }
 
-請確保回覆是有效的 JSON 格式，不要包含任何額外的文字或 markdown 格式。
+重要提醒：
+1. 所有文字內容必須使用繁體中文
+2. 專業術語如 PE、ROE、EPS、PEG、PB、PS、ROA、ROE、EBITDA、DCF 等可保留英文縮寫
+3. 公司名稱、行業名稱等應使用中文
+4. 請確保回覆是有效的 JSON 格式，不要包含任何額外的文字或 markdown 格式
 `;
 
         const result = await model.generateContent(prompt);
