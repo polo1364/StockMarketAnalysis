@@ -186,7 +186,7 @@
 
             try {
                 // 發送請求到後端 (server.js)
-                const res = await fetch('http://localhost:3000/api/analyze', {
+                const res = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -214,7 +214,7 @@
 
             } catch (error) {
                 console.error(error);
-                alert("連線失敗，請確認後端伺服器 (node server.js) 是否已啟動。");
+                alert("連線失敗，請稍後再試。");
             } finally {
                 // 恢復按鈕狀態
                 document.getElementById('loading').classList.add('hidden');

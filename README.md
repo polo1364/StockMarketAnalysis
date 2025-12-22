@@ -90,11 +90,44 @@ npm run dev
 - **股票數據**: Yahoo Finance API
 - **AI 分析**: Google Gemini API
 
+## 部署到 Railway
+
+### 步驟：
+
+1. **註冊 Railway 帳號**
+   - 前往 [Railway](https://railway.app) 註冊帳號
+
+2. **連接 GitHub 倉庫**
+   - 在 Railway 中點擊 "New Project"
+   - 選擇 "Deploy from GitHub repo"
+   - 選擇你的倉庫
+
+3. **自動部署**
+   - Railway 會自動檢測 Node.js 項目
+   - 自動執行 `npm install` 和 `npm start`
+   - 部署完成後會提供一個公開 URL
+
+4. **環境變數（可選）**
+   - Railway 會自動設置 `PORT` 環境變數
+   - 無需額外配置
+
+5. **訪問應用**
+   - 部署完成後，使用 Railway 提供的 URL 訪問應用
+   - 前端會自動連接到後端 API
+
+### Railway 配置
+
+項目已包含 `railway.json` 配置文件，Railway 會自動使用：
+- 構建器：NIXPACKS（自動檢測）
+- 啟動命令：`npm start`
+- 重啟策略：失敗時自動重啟
+
 ## 注意事項
 
 - ⚠️ AI 分析僅供參考，不代表投資建議
 - ⚠️ 股市數據可能有延遲
 - ⚠️ API Key 請妥善保管，不要分享給他人
+- ⚠️ 部署到 Railway 後，前端會自動使用相對路徑連接 API，無需修改配置
 
 ## 授權
 
