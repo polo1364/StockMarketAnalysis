@@ -39,7 +39,8 @@ async function httpRequest(url, options = {}) {
         const response = await axios.get(url, {
             headers: options.headers || {},
             timeout: 15000,
-            validateStatus: () => true // 接受所有状态码
+            validateStatus: () => true, // 接受所有状态码
+            maxRedirects: 5
         });
         
         // 返回类似 fetch 的响应对象
@@ -61,13 +62,30 @@ async function httpRequest(url, options = {}) {
             }
         };
     } catch (err) {
-        console.error(`axios 请求失败 (${url}):`, err.message);
+        // 详细的错误信息
+        const errorDetails = {
+            message: err.message,
+            code: err.code,
+            errno: err.errno,
+            syscall: err.syscall,
+            address: err.address,
+            port: err.port,
+            response: err.response ? {
+                status: err.response.status,
+                statusText: err.response.statusText,
+                data: err.response.data
+            } : null
+        };
+        console.error(`axios 请求失败 (${url}):`, JSON.stringify(errorDetails, null, 2));
+        
         // 如果 axios 失败，尝试原生 fetch
         try {
             console.log('尝试使用原生 fetch...');
-            return await fetch(url, options);
+            const fetchResponse = await fetch(url, options);
+            return fetchResponse;
         } catch (fetchErr) {
-            throw new Error(`HTTP 请求失败: ${err.message || fetchErr.message}`);
+            console.error(`fetch 也失败:`, fetchErr.message, fetchErr.cause);
+            throw new Error(`HTTP 请求失败: ${err.message || fetchErr.message}. 详情: ${JSON.stringify(errorDetails)}`);
         }
     }
 }
@@ -270,11 +288,57 @@ async function fetchStockData(ticker) {
         }
     }
     
-    // 方案 4: 返回模拟数据（用于演示）
+    // 方案 4: 使用 CORS 代理服务（如果 Railway 网络受限）
+    for (const symbol of symbolsToTry) {
+        try {
+            console.log(`尝试使用 CORS 代理: ${symbol}`);
+            // 使用公共 CORS 代理
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`)}`;
+            
+            const proxyResponse = await httpRequest(proxyUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (proxyResponse.ok) {
+                const chartData = await proxyResponse.json();
+                const result = chartData?.chart?.result?.[0];
+                const meta = result?.meta;
+                
+                if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
+                    console.log(`CORS 代理成功: ${symbol}`);
+                    const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
+                        ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
+                        : (meta.regularMarketChangePercent || 0);
+                    
+                    return {
+                        longName: meta.longName || meta.shortName || ticker,
+                        shortName: meta.shortName || meta.symbol || ticker,
+                        regularMarketPrice: meta.regularMarketPrice,
+                        regularMarketChangePercent: changePercent,
+                        trailingPE: meta.trailingPE || null,
+                        marketCap: meta.marketCap || null,
+                        regularMarketVolume: meta.regularMarketVolume || 0,
+                        regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
+                        regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
+                        regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
+                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
+                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
+                    };
+                }
+            }
+        } catch (err) {
+            console.error(`CORS 代理失败 (${symbol}):`, err.message);
+        }
+    }
+    
+    // 方案 5: 返回模拟数据（用于演示）
     console.log('========================================');
     console.log(`所有 API 都失败，返回演示数据...`);
     console.log(`尝试的符号: ${symbolsToTry.join(', ')}`);
-    console.log(`请查看上面的日志了解失败原因`);
+    console.log(`Railway 服务器可能无法访问外部网络`);
+    console.log(`建议：检查 Railway 的网络配置或使用其他部署平台`);
     console.log('========================================');
     
     // 根据股票代号生成一致的演示数据
