@@ -433,11 +433,32 @@ app.get('/api/routes', (req, res) => {
     res.json({ routes, message: '当前注册的路由' });
 });
 
+// 请求超时处理（Railway 可能有超时限制）
+const REQUEST_TIMEOUT = 55000; // 55 秒（Railway 通常是 60 秒）
+
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
     console.log('=== POST /api/analyze 被调用 ===');
     console.log('请求体:', JSON.stringify(req.body));
     console.log('请求头 x-api-key:', req.headers['x-api-key'] ? '存在' : '不存在');
+    
+    // 设置超时
+    const timeoutId = setTimeout(() => {
+        if (!res.headersSent) {
+            console.error('请求超时');
+            res.status(504).json({ 
+                error: '請求超時，請稍後再試。股票數據獲取或 AI 分析時間過長。' 
+            });
+        }
+    }, REQUEST_TIMEOUT);
+    
+    // 清理超时器
+    const clearTimeoutOnFinish = () => {
+        clearTimeout(timeoutId);
+    };
+    
+    res.on('finish', clearTimeoutOnFinish);
+    res.on('close', clearTimeoutOnFinish);
     const { ticker, style } = req.body;
     const apiKey = req.headers['x-api-key'];
 
@@ -529,7 +550,16 @@ app.post('/api/analyze', async (req, res) => {
 4. 請確保回覆是有效的 JSON 格式，不要包含任何額外的文字或 markdown 格式
 `;
 
-        const result = await model.generateContent(prompt);
+        // 设置 Gemini API 超时
+        const geminiTimeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Gemini API 超时')), 30000)
+        );
+        
+        const result = await Promise.race([
+            model.generateContent(prompt),
+            geminiTimeout
+        ]);
+        
         const response = await result.response;
         let aiText = response.text().trim();
 
@@ -553,6 +583,13 @@ app.post('/api/analyze', async (req, res) => {
         }
 
         // --- 3. 返回結果 ---
+        clearTimeout(timeoutId);
+        
+        if (res.headersSent) {
+            console.warn('响应已发送，跳过');
+            return;
+        }
+        
         res.json({
             market_data: marketData,
             summary: aiAnalysis.summary || "分析完成",
@@ -564,6 +601,13 @@ app.post('/api/analyze', async (req, res) => {
         });
 
     } catch (error) {
+        clearTimeout(timeoutId);
+        
+        if (res.headersSent) {
+            console.error('错误发生时响应已发送');
+            return;
+        }
+        
         console.error('分析錯誤:', error);
         console.error('錯誤堆棧:', error.stack);
         console.error('錯誤詳情:', {
@@ -572,6 +616,13 @@ app.post('/api/analyze', async (req, res) => {
             ticker: ticker,
             hasApiKey: !!apiKey
         });
+        
+        // 處理超時錯誤
+        if (error.message && (error.message.includes('超时') || error.message.includes('timeout') || error.message.includes('TIMEOUT'))) {
+            return res.status(504).json({ 
+                error: '請求超時，請稍後再試。股票數據獲取或 AI 分析時間過長。' 
+            });
+        }
         
         // 處理 Gemini API 錯誤
         if (error.message && (error.message.includes('API_KEY') || error.message.includes('API key'))) {
@@ -586,10 +637,9 @@ app.post('/api/analyze', async (req, res) => {
             });
         }
 
-        // 返回詳細錯誤信息（僅在開發環境）
+        // 返回詳細錯誤信息
         res.status(500).json({ 
-            error: '伺服器錯誤: ' + (error.message || '未知錯誤'),
-            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: '伺服器錯誤: ' + (error.message || '未知錯誤')
         });
     }
 });
