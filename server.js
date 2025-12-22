@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 
 // yahoo-finance2 v3 导入和初始化
 const YahooFinance = require('yahoo-finance2');
@@ -30,6 +31,46 @@ if (yahooFinance && yahooFinance.setGlobalConfig) {
 console.log('yahoo-finance2 初始化完成');
 console.log('类型:', typeof yahooFinance);
 console.log('可用方法:', Object.keys(yahooFinance || {}));
+
+// HTTP 请求辅助函数（使用 axios 作为 fetch 的备用）
+async function httpRequest(url, options = {}) {
+    try {
+        // 使用 axios（在 Railway 上更可靠）
+        const response = await axios.get(url, {
+            headers: options.headers || {},
+            timeout: 15000,
+            validateStatus: () => true // 接受所有状态码
+        });
+        
+        // 返回类似 fetch 的响应对象
+        return {
+            ok: response.status >= 200 && response.status < 400,
+            status: response.status,
+            statusText: response.statusText,
+            json: async () => {
+                if (typeof response.data === 'string') {
+                    return JSON.parse(response.data);
+                }
+                return response.data;
+            },
+            text: async () => {
+                if (typeof response.data === 'string') {
+                    return response.data;
+                }
+                return JSON.stringify(response.data);
+            }
+        };
+    } catch (err) {
+        console.error(`axios 请求失败 (${url}):`, err.message);
+        // 如果 axios 失败，尝试原生 fetch
+        try {
+            console.log('尝试使用原生 fetch...');
+            return await fetch(url, options);
+        } catch (fetchErr) {
+            throw new Error(`HTTP 请求失败: ${err.message || fetchErr.message}`);
+        }
+    }
+}
 
 // 获取股票数据的函数（使用多种数据源）
 async function fetchStockData(ticker) {
@@ -65,7 +106,7 @@ async function fetchStockData(ticker) {
             console.log(`尝试 Yahoo Chart API: ${symbol}`);
             const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
             
-            const chartResponse = await fetch(chartUrl, {
+            const chartResponse = await httpRequest(chartUrl, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Accept': 'application/json',
@@ -122,7 +163,7 @@ async function fetchStockData(ticker) {
             const twSymbol = symbol.replace(/\.(TW|TWO)$/, '');
             const twUrl = `https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.stockList;autoComplete=1;query=${encodeURIComponent(twSymbol)};region=TW;lang=zh-Hant-TW`;
             
-            const twResponse = await fetch(twUrl, {
+            const twResponse = await httpRequest(twUrl, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': 'application/json',
@@ -146,7 +187,7 @@ async function fetchStockData(ticker) {
             console.log(`尝试 Yahoo Quote Summary API: ${symbol}`);
             const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryProfile,price,defaultKeyStatistics`;
             
-            const quoteResponse = await fetch(quoteUrl, {
+            const quoteResponse = await httpRequest(quoteUrl, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': 'application/json'
@@ -196,7 +237,7 @@ async function fetchStockData(ticker) {
             console.log(`尝试 Yahoo Finance 快速报价: ${symbol}`);
             const quickUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=1&newsCount=0`;
             
-            const quickResponse = await fetch(quickUrl, {
+            const quickResponse = await httpRequest(quickUrl, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0',
                     'Accept': 'application/json'
