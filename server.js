@@ -136,12 +136,16 @@ const PORT = process.env.PORT || 3000;
 // 中间件
 app.use(cors());
 app.use(express.json());
-app.use(express.static('.')); // 提供静态文件服务（HTML文件）
 
 // 请求日志中间件（用于调试）
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
+});
+
+// 测试端点
+app.get('/api/test', (req, res) => {
+    res.json({ status: 'ok', message: 'API 正常運行', time: new Date().toISOString() });
 });
 
 // --- API 端点：分析股票 ---
@@ -299,10 +303,19 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: '伺服器運行中' });
 });
 
+// 静态文件服务（放在 API 路由之后）
+app.use(express.static('.'));
+
+// 所有其他请求返回 index.html（SPA 支持）
+app.get('*', (req, res) => {
+    res.sendFile('index.html', { root: '.' });
+});
+
 // 啟動伺服器
 app.listen(PORT, () => {
     console.log(`\n🚀 伺服器已啟動！`);
     console.log(`📊 前端網頁: http://localhost:${PORT}`);
-    console.log(`🔌 API 端點: http://localhost:${PORT}/api/analyze\n`);
+    console.log(`🔌 API 端點: http://localhost:${PORT}/api/analyze`);
+    console.log(`🧪 測試端點: http://localhost:${PORT}/api/test\n`);
 });
 
