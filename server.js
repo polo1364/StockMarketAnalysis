@@ -118,7 +118,52 @@ async function fetchStockData(ticker) {
         }
     }
     
-    // 方案 2: Yahoo Finance Chart API (通常不需要认证)
+    // 方案 2: 使用 CORS 代理服务（Railway 网络受限时的首选方案）
+    for (const symbol of symbolsToTry) {
+        try {
+            console.log(`尝试使用 CORS 代理: ${symbol}`);
+            // 使用公共 CORS 代理
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`)}`;
+            
+            const proxyResponse = await httpRequest(proxyUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (proxyResponse.ok) {
+                const chartData = await proxyResponse.json();
+                const result = chartData?.chart?.result?.[0];
+                const meta = result?.meta;
+                
+                if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
+                    console.log(`✅ CORS 代理成功: ${symbol}, 价格: ${meta.regularMarketPrice}`);
+                    const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
+                        ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
+                        : (meta.regularMarketChangePercent || 0);
+                    
+                    return {
+                        longName: meta.longName || meta.shortName || ticker,
+                        shortName: meta.shortName || meta.symbol || ticker,
+                        regularMarketPrice: meta.regularMarketPrice,
+                        regularMarketChangePercent: changePercent,
+                        trailingPE: meta.trailingPE || null,
+                        marketCap: meta.marketCap || null,
+                        regularMarketVolume: meta.regularMarketVolume || 0,
+                        regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
+                        regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
+                        regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
+                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
+                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
+                    };
+                }
+            }
+        } catch (err) {
+            console.error(`CORS 代理失败 (${symbol}):`, err.message);
+        }
+    }
+    
+    // 方案 2.5: Yahoo Finance Chart API (直接访问，Railway 上可能超时)
     for (const symbol of symbolsToTry) {
         try {
             console.log(`尝试 Yahoo Chart API: ${symbol}`);
@@ -285,51 +330,6 @@ async function fetchStockData(ticker) {
             }
         } catch (err) {
             console.error(`Yahoo 快速报价失败 (${symbol}):`, err.message);
-        }
-    }
-    
-    // 方案 4: 使用 CORS 代理服务（如果 Railway 网络受限）
-    for (const symbol of symbolsToTry) {
-        try {
-            console.log(`尝试使用 CORS 代理: ${symbol}`);
-            // 使用公共 CORS 代理
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`)}`;
-            
-            const proxyResponse = await httpRequest(proxyUrl, {
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (proxyResponse.ok) {
-                const chartData = await proxyResponse.json();
-                const result = chartData?.chart?.result?.[0];
-                const meta = result?.meta;
-                
-                if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
-                    console.log(`CORS 代理成功: ${symbol}`);
-                    const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
-                        ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
-                        : (meta.regularMarketChangePercent || 0);
-                    
-                    return {
-                        longName: meta.longName || meta.shortName || ticker,
-                        shortName: meta.shortName || meta.symbol || ticker,
-                        regularMarketPrice: meta.regularMarketPrice,
-                        regularMarketChangePercent: changePercent,
-                        trailingPE: meta.trailingPE || null,
-                        marketCap: meta.marketCap || null,
-                        regularMarketVolume: meta.regularMarketVolume || 0,
-                        regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
-                        regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
-                        regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
-                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
-                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
-                    };
-                }
-            }
-        } catch (err) {
-            console.error(`CORS 代理失败 (${symbol}):`, err.message);
         }
     }
     
