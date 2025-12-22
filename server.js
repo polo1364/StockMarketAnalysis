@@ -11,6 +11,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('.')); // 提供静态文件服务（HTML文件）
 
+// 请求日志中间件（用于调试）
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+});
+
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
     const { ticker, style } = req.body;
@@ -124,21 +130,31 @@ app.post('/api/analyze', async (req, res) => {
 
     } catch (error) {
         console.error('分析錯誤:', error);
+        console.error('錯誤堆棧:', error.stack);
+        console.error('錯誤詳情:', {
+            message: error.message,
+            name: error.name,
+            ticker: ticker,
+            hasApiKey: !!apiKey
+        });
         
         // 處理 Gemini API 錯誤
-        if (error.message && error.message.includes('API_KEY')) {
+        if (error.message && (error.message.includes('API_KEY') || error.message.includes('API key'))) {
             return res.status(401).json({ error: 'API Key 無效或過期' });
         }
 
         // 處理 Yahoo Finance 錯誤
-        if (error.message && (error.message.includes('Not Found') || error.message.includes('Invalid symbol'))) {
+        if (error.message && (error.message.includes('Not Found') || error.message.includes('Invalid symbol') || error.message.includes('not found'))) {
             return res.status(404).json({ 
-                analysis: `找不到股票代號 "${ticker}"，請確認代號是否正確。` 
+                error: `找不到股票代號 "${ticker}"，請確認代號是否正確。`,
+                analysis: `找不到股票代號 "${ticker}"，請確認代號是否正確。`
             });
         }
 
+        // 返回詳細錯誤信息（僅在開發環境）
         res.status(500).json({ 
-            error: '伺服器錯誤: ' + (error.message || '未知錯誤') 
+            error: '伺服器錯誤: ' + (error.message || '未知錯誤'),
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 });

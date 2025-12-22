@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 華爾街分析師</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -195,14 +196,39 @@
                     body: JSON.stringify({ ticker, style })
                 });
 
-                // 處理 401 錯誤 (Key 無效)
-                if (res.status === 401) {
-                    alert("API Key 無效或過期，請重新設定。");
-                    showModal();
+                // 處理錯誤狀態碼
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    
+                    if (res.status === 401) {
+                        alert("API Key 無效或過期，請重新設定。");
+                        showModal();
+                        return;
+                    }
+                    
+                    if (res.status === 404) {
+                        alert(errorData.analysis || `找不到股票代號 "${ticker}"，請確認代號是否正確。`);
+                        return;
+                    }
+                    
+                    if (res.status === 500) {
+                        alert(`伺服器錯誤: ${errorData.error || '請稍後再試'}`);
+                        console.error('伺服器錯誤詳情:', errorData);
+                        return;
+                    }
+                    
+                    alert(`錯誤 ${res.status}: ${errorData.error || '請稍後再試'}`);
                     return;
                 }
 
                 const data = await res.json();
+                
+                // 驗證數據結構
+                if (!data || !data.market_data) {
+                    alert("伺服器返回的數據格式不正確，請稍後再試。");
+                    console.error('無效的數據結構:', data);
+                    return;
+                }
                 
                 // 處理找不到股票的情況
                 if (data.analysis && data.analysis.includes("找不到")) {
