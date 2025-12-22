@@ -32,60 +32,63 @@ console.log('yahoo-finance2 初始化完成');
 console.log('类型:', typeof yahooFinance);
 console.log('可用方法:', Object.keys(yahooFinance || {}));
 
-// HTTP 请求辅助函数（使用 axios 作为 fetch 的备用）
+// HTTP 请求辅助函数（优先使用 fetch，axios 作为备用）
 async function httpRequest(url, options = {}) {
+    // 优先尝试原生 fetch（在 Railway 上可能更可靠）
     try {
-        // 使用 axios（在 Railway 上更可靠）
-        const response = await axios.get(url, {
-            headers: options.headers || {},
-            timeout: 15000,
-            validateStatus: () => true, // 接受所有状态码
-            maxRedirects: 5
+        console.log(`尝试使用原生 fetch: ${url.substring(0, 80)}...`);
+        const fetchResponse = await fetch(url, {
+            ...options,
+            signal: AbortSignal.timeout(30000) // 30 秒超时
         });
+        return fetchResponse;
+    } catch (fetchErr) {
+        console.log(`fetch 失败，尝试 axios:`, fetchErr.message);
         
-        // 返回类似 fetch 的响应对象
-        return {
-            ok: response.status >= 200 && response.status < 400,
-            status: response.status,
-            statusText: response.statusText,
-            json: async () => {
-                if (typeof response.data === 'string') {
-                    return JSON.parse(response.data);
-                }
-                return response.data;
-            },
-            text: async () => {
-                if (typeof response.data === 'string') {
-                    return response.data;
-                }
-                return JSON.stringify(response.data);
-            }
-        };
-    } catch (err) {
-        // 详细的错误信息
-        const errorDetails = {
-            message: err.message,
-            code: err.code,
-            errno: err.errno,
-            syscall: err.syscall,
-            address: err.address,
-            port: err.port,
-            response: err.response ? {
-                status: err.response.status,
-                statusText: err.response.statusText,
-                data: err.response.data
-            } : null
-        };
-        console.error(`axios 请求失败 (${url}):`, JSON.stringify(errorDetails, null, 2));
-        
-        // 如果 axios 失败，尝试原生 fetch
+        // 如果 fetch 失败，尝试 axios
         try {
-            console.log('尝试使用原生 fetch...');
-            const fetchResponse = await fetch(url, options);
-            return fetchResponse;
-        } catch (fetchErr) {
-            console.error(`fetch 也失败:`, fetchErr.message, fetchErr.cause);
-            throw new Error(`HTTP 请求失败: ${err.message || fetchErr.message}. 详情: ${JSON.stringify(errorDetails)}`);
+            const response = await axios.get(url, {
+                headers: options.headers || {},
+                timeout: 30000, // 增加到 30 秒
+                validateStatus: () => true, // 接受所有状态码
+                maxRedirects: 5
+            });
+            
+            // 返回类似 fetch 的响应对象
+            return {
+                ok: response.status >= 200 && response.status < 400,
+                status: response.status,
+                statusText: response.statusText,
+                json: async () => {
+                    if (typeof response.data === 'string') {
+                        return JSON.parse(response.data);
+                    }
+                    return response.data;
+                },
+                text: async () => {
+                    if (typeof response.data === 'string') {
+                        return response.data;
+                    }
+                    return JSON.stringify(response.data);
+                }
+            };
+        } catch (err) {
+            // 详细的错误信息
+            const errorDetails = {
+                message: err.message,
+                code: err.code,
+                errno: err.errno,
+                syscall: err.syscall,
+                address: err.address,
+                port: err.port,
+                response: err.response ? {
+                    status: err.response.status,
+                    statusText: err.response.statusText,
+                    data: err.response.data
+                } : null
+            };
+            console.error(`axios 也失败 (${url.substring(0, 80)}...):`, JSON.stringify(errorDetails, null, 2));
+            throw new Error(`HTTP 请求失败: ${fetchErr.message || err.message}`);
         }
     }
 }
