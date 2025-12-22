@@ -134,20 +134,44 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 中间件
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-api-key']
+}));
+
+// 处理 OPTIONS 预检请求
+app.options('*', (req, res) => {
+    res.sendStatus(200);
+});
+
 app.use(express.json());
 
 // 请求日志中间件（用于调试）
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-    console.log('请求头:', JSON.stringify(req.headers));
+    if (req.method === 'POST') {
+        console.log('POST 请求体:', JSON.stringify(req.body));
+    }
     next();
 });
 
 // 测试端点
 app.get('/api/test', (req, res) => {
-    console.log('测试端点被调用');
+    console.log('GET /api/test 被调用');
     res.json({ status: 'ok', message: 'API 正常運行', time: new Date().toISOString() });
+});
+
+// 测试 POST 端点
+app.post('/api/test', (req, res) => {
+    console.log('POST /api/test 被调用');
+    console.log('请求体:', req.body);
+    res.json({ 
+        status: 'ok', 
+        message: 'POST API 正常運行', 
+        received: req.body,
+        time: new Date().toISOString() 
+    });
 });
 
 // 列出所有路由的端点（用于调试）
@@ -322,19 +346,20 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: '伺服器運行中' });
 });
 
-// 静态文件服务（放在 API 路由之后，排除 /api 路径）
+// 静态文件服务（只处理非 API 请求）
 app.use((req, res, next) => {
-    // 如果是 API 请求，跳过静态文件服务
-    if (req.path.startsWith('/api')) {
+    // 跳过所有 API 请求
+    if (req.path.startsWith('/api') || req.path === '/health') {
         return next();
     }
-    express.static('.')(req, res, next);
+    // 使用静态文件服务
+    express.static('.', { index: false })(req, res, next);
 });
 
 // 所有其他 GET 请求返回 index.html（SPA 支持）
 app.get('*', (req, res) => {
     // 确保不拦截 API 请求
-    if (req.path.startsWith('/api')) {
+    if (req.path.startsWith('/api') || req.path === '/health') {
         return res.status(404).json({ error: 'API 端点不存在' });
     }
     res.sendFile('index.html', { root: '.' });
