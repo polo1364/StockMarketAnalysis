@@ -74,13 +74,16 @@ async function fetchStockData(ticker) {
                 }
             });
             
+            console.log(`Yahoo Chart API 响应状态: ${chartResponse.status} for ${symbol}`);
+            
             if (chartResponse.ok) {
                 const chartData = await chartResponse.json();
+                console.log(`Yahoo Chart API 响应数据:`, JSON.stringify(chartData).substring(0, 500));
                 const result = chartData?.chart?.result?.[0];
                 const meta = result?.meta;
                 
                 if (meta && meta.regularMarketPrice !== undefined && meta.regularMarketPrice !== null) {
-                    console.log(`Yahoo Chart API 成功: ${symbol}`);
+                    console.log(`Yahoo Chart API 成功: ${symbol}, 价格: ${meta.regularMarketPrice}`);
                     const changePercent = meta.regularMarketPrice && meta.chartPreviousClose 
                         ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100)
                         : (meta.regularMarketChangePercent || 0);
@@ -100,13 +103,40 @@ async function fetchStockData(ticker) {
                         fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
                     };
                 } else {
-                    console.log(`Yahoo Chart API 返回数据但无价格: ${symbol}`);
+                    console.log(`Yahoo Chart API 返回数据但无价格: ${symbol}, meta:`, JSON.stringify(meta).substring(0, 200));
                 }
             } else {
-                console.log(`Yahoo Chart API 返回 ${chartResponse.status}: ${symbol}`);
+                const errorText = await chartResponse.text().catch(() => '');
+                console.log(`Yahoo Chart API 返回 ${chartResponse.status}: ${symbol}, 错误: ${errorText.substring(0, 200)}`);
             }
         } catch (err) {
-            console.error(`Yahoo Chart API 失败 (${symbol}):`, err.message);
+            console.error(`Yahoo Chart API 失败 (${symbol}):`, err.message, err.stack);
+        }
+    }
+    
+    // 方案 2.5: Yahoo Finance 台湾站点 API
+    for (const symbol of symbolsToTry) {
+        try {
+            console.log(`尝试 Yahoo Finance TW API: ${symbol}`);
+            // 移除后缀，使用原始代码
+            const twSymbol = symbol.replace(/\.(TW|TWO)$/, '');
+            const twUrl = `https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.stockList;autoComplete=1;query=${encodeURIComponent(twSymbol)};region=TW;lang=zh-Hant-TW`;
+            
+            const twResponse = await fetch(twUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json',
+                    'Referer': 'https://tw.stock.yahoo.com/'
+                }
+            });
+            
+            if (twResponse.ok) {
+                const twData = await twResponse.json();
+                console.log(`Yahoo TW API 响应:`, JSON.stringify(twData).substring(0, 500));
+                // 这里需要根据实际 API 响应格式解析
+            }
+        } catch (err) {
+            console.error(`Yahoo Finance TW API 失败:`, err.message);
         }
     }
     
@@ -123,36 +153,88 @@ async function fetchStockData(ticker) {
                 }
             });
             
+            console.log(`Yahoo Quote Summary API 响应状态: ${quoteResponse.status} for ${symbol}`);
+            
             if (quoteResponse.ok) {
                 const quoteData = await quoteResponse.json();
+                console.log(`Yahoo Quote Summary API 响应数据:`, JSON.stringify(quoteData).substring(0, 500));
                 const price = quoteData?.quoteSummary?.result?.[0]?.price;
                 const profile = quoteData?.quoteSummary?.result?.[0]?.summaryProfile;
                 
-                if (price && price.regularMarketPrice) {
-                    console.log(`Yahoo Quote Summary API 成功: ${symbol}`);
+                if (price && (price.regularMarketPrice || price.regularMarketPrice?.raw)) {
+                    const marketPrice = price.regularMarketPrice?.raw || price.regularMarketPrice;
+                    console.log(`Yahoo Quote Summary API 成功: ${symbol}, 价格: ${marketPrice}`);
                     return {
                         longName: profile?.longName || price.longName || price.shortName || ticker,
                         shortName: price.shortName || ticker,
-                        regularMarketPrice: price.regularMarketPrice?.raw || price.regularMarketPrice,
+                        regularMarketPrice: marketPrice,
                         regularMarketChangePercent: price.regularMarketChangePercent?.raw || price.regularMarketChangePercent || 0,
                         trailingPE: quoteData?.quoteSummary?.result?.[0]?.defaultKeyStatistics?.trailingPE?.raw || null,
                         marketCap: price.marketCap?.raw || price.marketCap || null,
                         regularMarketVolume: price.regularMarketVolume?.raw || price.regularMarketVolume || 0,
-                        regularMarketPreviousClose: price.regularMarketPreviousClose?.raw || price.regularMarketPreviousClose || price.regularMarketPrice,
-                        regularMarketDayHigh: price.regularMarketDayHigh?.raw || price.regularMarketDayHigh || price.regularMarketPrice,
-                        regularMarketDayLow: price.regularMarketDayLow?.raw || price.regularMarketDayLow || price.regularMarketPrice,
-                        fiftyTwoWeekHigh: price.fiftyTwoWeekHigh?.raw || price.fiftyTwoWeekHigh || price.regularMarketPrice,
-                        fiftyTwoWeekLow: price.fiftyTwoWeekLow?.raw || price.fiftyTwoWeekLow || price.regularMarketPrice
+                        regularMarketPreviousClose: price.regularMarketPreviousClose?.raw || price.regularMarketPreviousClose || marketPrice,
+                        regularMarketDayHigh: price.regularMarketDayHigh?.raw || price.regularMarketDayHigh || marketPrice,
+                        regularMarketDayLow: price.regularMarketDayLow?.raw || price.regularMarketDayLow || marketPrice,
+                        fiftyTwoWeekHigh: price.fiftyTwoWeekHigh?.raw || price.fiftyTwoWeekHigh || marketPrice,
+                        fiftyTwoWeekLow: price.fiftyTwoWeekLow?.raw || price.fiftyTwoWeekLow || marketPrice
+                    };
+                } else {
+                    console.log(`Yahoo Quote Summary API 无价格数据: ${symbol}`);
+                }
+            } else {
+                const errorText = await quoteResponse.text().catch(() => '');
+                console.log(`Yahoo Quote Summary API 返回 ${quoteResponse.status}: ${symbol}, 错误: ${errorText.substring(0, 200)}`);
+            }
+        } catch (err) {
+            console.error(`Yahoo Quote Summary API 失败 (${symbol}):`, err.message, err.stack);
+        }
+    }
+    
+    // 方案 3.5: 直接使用 Yahoo Finance 快速报价（最简单的方法）
+    for (const symbol of symbolsToTry) {
+        try {
+            console.log(`尝试 Yahoo Finance 快速报价: ${symbol}`);
+            const quickUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=1&newsCount=0`;
+            
+            const quickResponse = await fetch(quickUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0',
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (quickResponse.ok) {
+                const quickData = await quickResponse.json();
+                const quote = quickData?.quotes?.[0];
+                if (quote && quote.regularMarketPrice) {
+                    console.log(`Yahoo 快速报价成功: ${symbol}`);
+                    return {
+                        longName: quote.longname || quote.shortname || ticker,
+                        shortName: quote.shortname || ticker,
+                        regularMarketPrice: quote.regularMarketPrice,
+                        regularMarketChangePercent: quote.regularMarketChangePercent || 0,
+                        trailingPE: null,
+                        marketCap: null,
+                        regularMarketVolume: quote.regularMarketVolume || 0,
+                        regularMarketPreviousClose: quote.regularMarketPreviousClose || quote.regularMarketPrice,
+                        regularMarketDayHigh: quote.regularMarketDayHigh || quote.regularMarketPrice,
+                        regularMarketDayLow: quote.regularMarketDayLow || quote.regularMarketPrice,
+                        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh || quote.regularMarketPrice,
+                        fiftyTwoWeekLow: quote.fiftyTwoWeekLow || quote.regularMarketPrice
                     };
                 }
             }
         } catch (err) {
-            console.error(`Yahoo Quote Summary API 失败 (${symbol}):`, err.message);
+            console.error(`Yahoo 快速报价失败 (${symbol}):`, err.message);
         }
     }
     
     // 方案 4: 返回模拟数据（用于演示）
-    console.log('所有 API 都失败，返回演示数据...');
+    console.log('========================================');
+    console.log(`所有 API 都失败，返回演示数据...`);
+    console.log(`尝试的符号: ${symbolsToTry.join(', ')}`);
+    console.log(`请查看上面的日志了解失败原因`);
+    console.log('========================================');
     
     // 根据股票代号生成一致的演示数据
     const hash = ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
