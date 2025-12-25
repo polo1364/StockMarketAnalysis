@@ -324,8 +324,8 @@ async function fetchStockHistory(ticker, days = 30) {
     return [];
 }
 
-// 获取股票本益比等财务数据的函数
-async function fetchStockPE(ticker) {
+// 获取股票财务指标的函数（本益比、股息率、股價淨值比等）
+async function fetchStockFinancials(ticker) {
     const stockCode = ticker.replace(/^0+/, '');
     const stockCodePadded = stockCode.padStart(4, '0');
     
@@ -352,44 +352,35 @@ async function fetchStockPE(ticker) {
                     console.log(`本益比 API 数据示例字段:`, Object.keys(peData[0]));
                 }
                 
-                // 查找匹配的股票
+                // 查找匹配的股票（支持多种格式，包括 ETF）
                 const stockPE = peData.find(s => {
                     const code = String(s.Code || s.代號 || '').trim();
+                    // 尝试多种格式匹配（包括带前导零的格式）
                     return code === stockCodePadded || 
                            code === stockCode || 
-                           code === ticker.padStart(4, '0');
+                           code === ticker.padStart(4, '0') ||
+                           code === ticker.padStart(5, '0') ||
+                           code === ticker ||
+                           (ticker.length === 5 && code === ticker.substring(1)); // ETF: 00940 -> 0940
                 });
                 
                 if (stockPE) {
-                    console.log(`找到股票本益比数据:`, stockPE);
+                    console.log(`找到股票财务指标数据:`, stockPE);
                     
-                    // 解析本益比（PE Ratio）
-                    // TWSE 返回的字段名是 PEratio（根据日志显示）
-                    let pe = null;
+                    // 解析各种财务指标
+                    const pe = parseFloat(String(stockPE.PEratio || stockPE.PE || 0).replace(/,/g, '')) || null;
+                    const dividendYield = parseFloat(String(stockPE.DividendYield || stockPE['殖利率'] || 0).replace(/,/g, '')) || null;
+                    const pb = parseFloat(String(stockPE.PBratio || stockPE.PB || stockPE['股價淨值比'] || 0).replace(/,/g, '')) || null;
                     
-                    // 尝试多种可能的字段名（按优先级）
-                    if (stockPE.PEratio !== undefined && stockPE.PEratio !== null && stockPE.PEratio !== '') {
-                        pe = parseFloat(String(stockPE.PEratio).replace(/,/g, '')) || null;
-                        console.log(`从 PEratio 字段获取本益比: ${pe}`);
-                    } else if (stockPE.PE !== undefined && stockPE.PE !== null && stockPE.PE !== '') {
-                        pe = parseFloat(String(stockPE.PE).replace(/,/g, '')) || null;
-                        console.log(`从 PE 字段获取本益比: ${pe}`);
-                    } else if (stockPE['本益比'] !== undefined && stockPE['本益比'] !== null && stockPE['本益比'] !== '') {
-                        pe = parseFloat(String(stockPE['本益比']).replace(/,/g, '')) || null;
-                        console.log(`从 本益比 字段获取本益比: ${pe}`);
-                    } else if (stockPE.PriceEarningRatio !== undefined && stockPE.PriceEarningRatio !== null) {
-                        pe = parseFloat(String(stockPE.PriceEarningRatio).replace(/,/g, '')) || null;
-                        console.log(`从 PriceEarningRatio 字段获取本益比: ${pe}`);
-                    }
+                    console.log(`✅ 获取财务指标成功: ${stockCodePadded}, PE: ${pe}, 股息率: ${dividendYield}, PB: ${pb}`);
                     
-                    if (pe && pe > 0) {
-                        console.log(`✅ 获取本益比成功: ${stockCodePadded}, PE: ${pe}`);
-                        return pe;
-                    } else {
-                        console.log(`⚠️ 本益比数据无效: ${stockCodePadded}, PE值: ${pe}, 原始数据:`, stockPE);
-                    }
+                    return {
+                        pe: pe && pe > 0 ? pe : null,
+                        dividendYield: dividendYield && dividendYield > 0 ? dividendYield : null,
+                        pb: pb && pb > 0 ? pb : null
+                    };
                 } else {
-                    console.log(`⚠️ 未找到股票代码 ${stockCodePadded} 的本益比数据`);
+                    console.log(`⚠️ 未找到股票代码 ${stockCodePadded} 的财务指标数据`);
                 }
             } else {
                 console.log(`⚠️ 本益比 API 返回的数据不是数组或为空`);
@@ -402,7 +393,7 @@ async function fetchStockPE(ticker) {
         console.error(`错误堆栈:`, err.stack);
     }
     
-    return null;
+    return { pe: null, dividendYield: null, pb: null };
 }
 
 // 获取股票数据的函数（使用多种数据源）
@@ -462,15 +453,17 @@ async function fetchStockData(ticker) {
                 const highestPrice = parseFloat(String(stock.HighestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
                 const lowestPrice = parseFloat(String(stock.LowestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
                 
-                // 尝试获取本益比
-                peRatio = await fetchStockPE(ticker);
+                // 尝试获取财务指标（本益比、股息率、PB等）
+                const financials = await fetchStockFinancials(ticker);
                 
                 return {
                     longName: stock.Name || ticker,
                     shortName: stock.Code || ticker,
                     regularMarketPrice: closingPrice,
                     regularMarketChangePercent: changePercent,
-                    trailingPE: peRatio,
+                    trailingPE: financials.pe,
+                    dividendYield: financials.dividendYield,
+                    pb: financials.pb,
                     marketCap: null,
                     regularMarketVolume: volume,
                     regularMarketPreviousClose: previousClose,
@@ -525,12 +518,17 @@ async function fetchStockData(ticker) {
                 // 优先使用中文名称（longName 通常是中文）
                 const stockName = meta.longName || meta.shortName || ticker;
                 
+                // 尝试获取财务指标
+                const financials = await fetchStockFinancials(ticker);
+                
                 return {
                     longName: stockName,
                     shortName: meta.shortName || meta.symbol || ticker,
                     regularMarketPrice: meta.regularMarketPrice,
                     regularMarketChangePercent: changePercent,
-                    trailingPE: meta.trailingPE || null,
+                    trailingPE: financials.pe || meta.trailingPE || null,
+                    dividendYield: financials.dividendYield || null,
+                    pb: financials.pb || null,
                     marketCap: meta.marketCap || null,
                     regularMarketVolume: meta.regularMarketVolume || 0,
                     regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
@@ -572,12 +570,17 @@ async function fetchStockData(ticker) {
                     
                     const stockName = meta.longName || meta.shortName || ticker;
                     
+                    // 尝试获取财务指标
+                    const financials = await fetchStockFinancials(ticker);
+                    
                     return {
                         longName: stockName,
                         shortName: meta.shortName || meta.symbol || ticker,
                         regularMarketPrice: meta.regularMarketPrice,
                         regularMarketChangePercent: changePercent,
-                        trailingPE: meta.trailingPE || null,
+                        trailingPE: financials.pe || meta.trailingPE || null,
+                        dividendYield: financials.dividendYield || null,
+                        pb: financials.pb || null,
                         marketCap: meta.marketCap || null,
                         regularMarketVolume: meta.regularMarketVolume || 0,
                         regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
@@ -752,6 +755,8 @@ app.post('/api/analyze', async (req, res) => {
                 ? `${quote.regularMarketChangePercent.toFixed(2)}%` 
                 : '0%',
             pe: quote.trailingPE ? quote.trailingPE.toFixed(2) : 'N/A',
+            dividendYield: quote.dividendYield ? quote.dividendYield.toFixed(2) : 'N/A',
+            pb: quote.pb ? quote.pb.toFixed(2) : 'N/A',
             marketCap: quote.marketCap || 0,
             volume: quote.regularMarketVolume || 0,
             previousClose: quote.regularMarketPreviousClose || 0,

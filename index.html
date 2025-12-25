@@ -82,30 +82,110 @@
 
         <div id="result-area" class="hidden flex flex-col gap-6">
             
+            <!-- 主要股票信息卡片 -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 md:col-span-2 flex justify-between items-center relative overflow-hidden">
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                    <div>
-                        <h2 id="stock-name" class="text-2xl font-bold text-white mb-1">--</h2>
-                        <div class="flex items-center gap-2 text-sm text-slate-400">
-                            <span class="bg-slate-700 px-2 py-0.5 rounded text-xs">即時行情</span>
-                            <span id="stock-pe">本益比: --</span>
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 md:col-span-2 flex justify-between items-center relative overflow-hidden shadow-xl">
+                    <div class="absolute top-0 right-0 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                    <div class="z-10">
+                        <h2 id="stock-name" class="text-2xl font-bold text-white mb-2">--</h2>
+                        <div class="flex items-center gap-3 text-sm text-slate-400">
+                            <span class="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-lg text-xs font-semibold border border-blue-500/30">即時行情</span>
+                            <span id="stock-pe" class="flex items-center gap-1">
+                                <i class="fa-solid fa-chart-pie text-xs"></i>
+                                <span>本益比: --</span>
+                            </span>
                         </div>
                     </div>
                     <div class="text-right z-10">
-                        <div id="stock-price" class="text-4xl font-mono font-bold text-white tracking-tighter">--</div>
-                        <div id="stock-change" class="text-lg font-bold flex items-center justify-end gap-1">
+                        <div id="stock-price" class="text-5xl font-mono font-bold text-white tracking-tighter mb-1">--</div>
+                        <div id="stock-change" class="text-xl font-bold flex items-center justify-end gap-1">
                             <span>--%</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 flex flex-col justify-center items-center text-center relative overflow-hidden">
-                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">AI 建議</p>
-                    <div id="ai-action" class="text-3xl font-black text-white mb-2">--</div>
-                    <div id="risk-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300">
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 flex flex-col justify-center items-center text-center relative overflow-hidden shadow-xl">
+                    <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10"></div>
+                    <p class="text-xs text-slate-400 uppercase tracking-wider mb-3 relative z-10">AI 建議</p>
+                    <div id="ai-action" class="text-4xl font-black mb-3 relative z-10">--</div>
+                    <div id="risk-badge" class="inline-block px-4 py-2 rounded-full text-xs font-bold bg-slate-700/50 text-slate-300 border border-slate-600 relative z-10">
                         風險: --
                     </div>
+                </div>
+            </div>
+
+            <!-- 財務指標卡片 -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg hover:shadow-blue-500/10">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-chart-pie text-blue-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400">本益比</p>
+                            <p id="metric-pe" class="text-lg font-bold text-white">--</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-green-500/50 transition-all shadow-lg hover:shadow-green-500/10">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-coins text-green-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400">股息率</p>
+                            <p id="metric-dividend" class="text-lg font-bold text-white">--</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-purple-500/50 transition-all shadow-lg hover:shadow-purple-500/10">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-building text-purple-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400">股價淨值比</p>
+                            <p id="metric-pb" class="text-lg font-bold text-white">--</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-yellow-500/50 transition-all shadow-lg hover:shadow-yellow-500/10">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-chart-bar text-yellow-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400">成交量</p>
+                            <p id="metric-volume" class="text-lg font-bold text-white">--</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 價格區間卡片 -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
+                    <p class="text-xs text-slate-400 mb-1">前收盤</p>
+                    <p id="metric-prev-close" class="text-lg font-semibold text-slate-200">--</p>
+                </div>
+                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
+                    <p class="text-xs text-slate-400 mb-1">今日最高</p>
+                    <p id="metric-high" class="text-lg font-semibold text-red-400">--</p>
+                </div>
+                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
+                    <p class="text-xs text-slate-400 mb-1">今日最低</p>
+                    <p id="metric-low" class="text-lg font-semibold text-green-400">--</p>
+                </div>
+                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
+                    <p class="text-xs text-slate-400 mb-1">52週最高</p>
+                    <p id="metric-52w-high" class="text-lg font-semibold text-red-300">--</p>
+                </div>
+                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
+                    <p class="text-xs text-slate-400 mb-1">52週最低</p>
+                    <p id="metric-52w-low" class="text-lg font-semibold text-green-300">--</p>
                 </div>
             </div>
 
@@ -278,13 +358,26 @@
             // --- A. 填寫市場數據 ---
             document.getElementById('stock-name').innerText = m.name;
             // 處理小數點顯示
-            document.getElementById('stock-price').innerText = m.price.toLocaleString(); 
-            document.getElementById('stock-pe').innerText = `本益比: ${m.pe}`;
+            document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
+            document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
             
             // 如果是演示數據，顯示提示
             if (m.isDemo) {
                 document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
+            
+            // 填寫財務指標
+            document.getElementById('metric-pe').innerText = m.pe;
+            document.getElementById('metric-dividend').innerText = m.dividendYield !== 'N/A' ? `${m.dividendYield}%` : 'N/A';
+            document.getElementById('metric-pb').innerText = m.pb;
+            document.getElementById('metric-volume').innerText = m.volume > 0 ? (m.volume >= 1000000 ? `${(m.volume / 1000000).toFixed(2)}M` : m.volume >= 1000 ? `${(m.volume / 1000).toFixed(1)}K` : m.volume.toLocaleString()) : 'N/A';
+            
+            // 填寫價格區間
+            document.getElementById('metric-prev-close').innerText = m.previousClose > 0 ? m.previousClose.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-high').innerText = m.dayHigh > 0 ? m.dayHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-low').innerText = m.dayLow > 0 ? m.dayLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-52w-high').innerText = m.fiftyTwoWeekHigh > 0 ? m.fiftyTwoWeekHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-52w-low').innerText = m.fiftyTwoWeekLow > 0 ? m.fiftyTwoWeekLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
 
             // 處理漲跌顏色 (Yahoo 回傳的是字串帶 %，先判斷正負)
             const changeStr = m.change || "0%";
