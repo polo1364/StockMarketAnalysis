@@ -977,12 +977,21 @@ app.post('/api/analyze', async (req, res) => {
             });
         } else {
             // 多个风格，返回所有分析结果
+            const formattedAnalyses = analyses.map((analysis, index) => ({
+                style: analysisStyles[index],
+                summary: analysis.summary || '分析中...',
+                analysis: analysis.analysis || '分析中...',
+                action: analysis.action || 'HOLD',
+                risk_level: analysis.risk_level || '中',
+                bullish_points: analysis.bullish_points || [],
+                bearish_points: analysis.bearish_points || []
+            }));
+            
+            console.log(`返回 ${formattedAnalyses.length} 个风格的分析结果`);
+            
             res.json({
                 market_data: marketData,
-                analyses: analyses.map((analysis, index) => ({
-                    style: analysisStyles[index],
-                    ...analysis
-                })),
+                analyses: formattedAnalyses,
                 history: history
             });
         }

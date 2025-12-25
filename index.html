@@ -229,7 +229,7 @@
             </div>
 
             <!-- 多風格分析結果 -->
-            <div id="multi-style-analysis" class="space-y-4 hidden">
+            <div id="multi-style-analysis" class="space-y-4">
                 <!-- 動態插入4種風格的分析結果 -->
             </div>
 
@@ -508,10 +508,25 @@
                 }
 
                 // 检查是否有多个风格的分析结果
-                if (data.analyses && Array.isArray(data.analyses)) {
+                console.log('接收到的完整数据:', JSON.stringify(data, null, 2));
+                console.log('analyses 数据:', data.analyses);
+                console.log('analyses 类型:', typeof data.analyses, '是否为数组:', Array.isArray(data.analyses));
+                
+                if (data.analyses && Array.isArray(data.analyses) && data.analyses.length > 0) {
+                    console.log('✅ 使用多风格渲染，分析数量:', data.analyses.length);
                     renderMultiStyleData(data, styles);
-                } else {
+                } else if (data.summary || data.analysis) {
+                    console.log('⚠️ 使用单风格渲染（向后兼容）');
                     renderData(data);
+                } else {
+                    console.error('❌ 没有找到分析结果');
+                    console.error('数据内容:', data);
+                    // 即使没有分析结果，也显示市场数据
+                    if (data.market_data) {
+                        renderMultiStyleData({ ...data, analyses: [] }, styles);
+                    } else {
+                        alert('未收到分析结果，请稍后重试。');
+                    }
                 }
 
             } catch (error) {
@@ -603,13 +618,27 @@
                 }
             }
             
+            // 确保容器可见
+            container.classList.remove('hidden');
             container.innerHTML = '';
             
             // 檢查是否有分析結果
             const analyses = data.analyses || [];
+            console.log('准备渲染多风格分析，analyses:', analyses, 'styles:', styles);
+            
+            if (analyses.length === 0) {
+                container.innerHTML = '<div class="bg-slate-800 rounded-2xl border border-slate-700 p-6 text-center"><p class="text-slate-400">分析結果尚未返回，請稍候...</p></div>';
+                return;
+            }
             
             styles.forEach((style, index) => {
-                const analysis = analyses[index] || analyses.find(a => a.style === style.value) || null;
+                // 尝试多种方式匹配分析结果
+                let analysis = analyses[index] || 
+                              analyses.find(a => a.style === style.value) ||
+                              analyses.find(a => a.style && a.style.includes(style.value)) ||
+                              null;
+                              
+                console.log(`风格 ${style.value} (索引 ${index}) 的分析结果:`, analysis);
                 
                 const styleCard = document.createElement('div');
                 styleCard.className = 'bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in';
