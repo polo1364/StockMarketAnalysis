@@ -1097,9 +1097,9 @@ ${technicalInfo}
 10. **風險評估必須具體明確，不能泛泛而談**
 `;
 
-        // 设置 Gemini API 超时
+        // 设置 Gemini API 超时（增加到45秒，因为分析更复杂）
         const geminiTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Gemini API 超时')), 30000)
+            setTimeout(() => reject(new Error('Gemini API 超时')), 45000)
         );
         
         const result = await Promise.race([
@@ -1113,36 +1113,129 @@ ${technicalInfo}
         // 清理 AI 回應（移除可能的 markdown 代碼塊）
         aiText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         
-                let aiAnalysis;
-                try {
-                    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) {
-                        aiAnalysis = JSON.parse(jsonMatch[0]);
-                    } else {
-                        throw new Error('無法找到 JSON');
+        let aiAnalysis;
+        try {
+            // 尝试找到JSON对象（使用非贪婪匹配，找到第一个完整的JSON对象）
+            const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                let jsonStr = jsonMatch[0];
+                
+                // 使用更简单的方法：转义字符串值中的所有控制字符
+                // 这个方法会正确处理JSON字符串值中的换行符等
+                let inString = false;
+                let escaped = false;
+                let result = '';
+                
+                for (let i = 0; i < jsonStr.length; i++) {
+                    const char = jsonStr[i];
+                    
+                    if (escaped) {
+                        result += char;
+                        escaped = false;
+                        continue;
                     }
-                } catch (parseError) {
-                    console.error(`解析 ${currentStyle} 風格分析失敗:`, parseError);
-                    aiAnalysis = {
-                        summary: "AI 分析暫時無法取得，請稍後再試。",
-                        analysis: aiText || "無法解析 AI 回應。",
-                        action: "HOLD",
-                        risk_level: "中",
-                        bullish_points: [],
-                        bearish_points: []
-                    };
+                    
+                    if (char === '\\') {
+                        result += char;
+                        escaped = true;
+                        continue;
+                    }
+                    
+                    if (char === '"') {
+                        inString = !inString;
+                        result += char;
+                        continue;
+                    }
+                    
+                    if (inString) {
+                        // 在字符串值中，转义控制字符
+                        if (char === '\n') result += '\\n';
+                        else if (char === '\r') result += '\\r';
+                        else if (char === '\t') result += '\\t';
+                        else if (char === '\f') result += '\\f';
+                        else if (char === '\b') result += '\\b';
+                        else if (char === '\v') result += '\\v';
+                        else if (char.charCodeAt(0) < 32) {
+                            // 其他控制字符，转换为Unicode转义
+                            result += '\\u' + ('0000' + char.charCodeAt(0).toString(16)).slice(-4);
+                        } else {
+                            result += char;
+                        }
+                    } else {
+                        // 在JSON结构外，移除或替换控制字符
+                        if (char === '\n' || char === '\r' || char === '\t') {
+                            result += ' ';
+                        } else if (char.charCodeAt(0) < 32) {
+                            // 忽略其他控制字符
+                        } else {
+                            result += char;
+                        }
+                    }
                 }
+                
+                // 尝试解析
+                aiAnalysis = JSON.parse(result);
+            } else {
+                throw new Error('無法找到 JSON');
+            }
+        } catch (parseError) {
+            console.error(`解析 ${currentStyle} 風格分析失敗:`, parseError.message);
+            console.error(`原始回應前500字符:`, aiText.substring(0, 500));
+            
+            // 尝试更宽松的解析方式
+            try {
+                // 尝试修复常见的JSON问题
+                let fixedJson = aiText
+                    .replace(/\n/g, ' ')
+                    .replace(/\r/g, ' ')
+                    .replace(/\t/g, ' ')
+                    .replace(/,(\s*[}\]])/g, '$1')  // 移除尾随逗号
+                    .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":'); // 给未引用的键加引号
+                
+                const jsonMatch2 = fixedJson.match(/\{[\s\S]*\}/);
+                if (jsonMatch2) {
+                    aiAnalysis = JSON.parse(jsonMatch2[0]);
+                    console.log(`使用修复后的JSON解析成功`);
+                } else {
+                    throw new Error('無法修復 JSON');
+                }
+            } catch (fixError) {
+                // 如果还是失败，返回默认值
+                aiAnalysis = {
+                    summary: "AI 分析暫時無法取得，請稍後再試。",
+                    analysis: `無法解析 AI 回應。錯誤: ${parseError.message}。原始回應: ${aiText.substring(0, 200)}...`,
+                    action: "持有",
+                    risk_level: "中",
+                    target_price: "N/A",
+                    stop_loss: "N/A",
+                    time_horizon: "N/A",
+                    position_sizing: "N/A",
+                    bullish_points: [],
+                    bearish_points: [],
+                    key_levels: {},
+                    industry_comparison: "N/A",
+                    catalyst: "N/A"
+                };
+            }
+        }
                 
                 return aiAnalysis;
             } catch (err) {
                 console.error(`分析風格 ${currentStyle} 失敗:`, err.message);
                 return {
                     summary: "分析失敗，請稍後再試。",
-                    analysis: "無法獲取分析結果。",
-                    action: "HOLD",
+                    analysis: `無法獲取分析結果。錯誤: ${err.message}`,
+                    action: "持有",
                     risk_level: "中",
+                    target_price: "N/A",
+                    stop_loss: "N/A",
+                    time_horizon: "N/A",
+                    position_sizing: "N/A",
                     bullish_points: [],
-                    bearish_points: []
+                    bearish_points: [],
+                    key_levels: {},
+                    industry_comparison: "N/A",
+                    catalyst: "N/A"
                 };
             }
         });
