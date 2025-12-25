@@ -349,8 +349,13 @@
             if (data.history && data.history.length > 0) {
                 renderCharts(data.history);
             } else {
-                // 如果没有历史数据，隐藏图表区域或显示提示
+                // 如果没有历史数据，显示提示信息
                 console.log('没有历史数据');
+                const priceChartContainer = document.getElementById('price-chart').parentElement;
+                const volumeChartContainer = document.getElementById('volume-chart').parentElement;
+                
+                priceChartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-slate-500"><p>暫無歷史數據，無法顯示技術線圖</p></div>';
+                volumeChartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-slate-500"><p>暫無歷史數據，無法顯示交易量圖表</p></div>';
             }
         }
         

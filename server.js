@@ -100,52 +100,143 @@ async function fetchStockHistory(ticker, days = 30) {
     
     try {
         // 使用 TWSE API 获取历史数据
-        // 获取最近30天的数据
+        // 尝试多个日期，因为可能遇到非交易日
         const today = new Date();
-        const dates = [];
-        for (let i = 0; i < days; i++) {
-            const date = new Date(today);
-            date.setDate(date.getDate() - i);
-            const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-            dates.push(dateStr);
+        let allHistory = [];
+        
+        // 尝试获取最近几个月的数据（最多尝试10个日期，往前推）
+        for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
+            const targetDate = new Date(today);
+            targetDate.setMonth(targetDate.getMonth() - monthOffset);
+            
+            // 尝试该月的最后几个交易日
+            for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
+                const tryDate = new Date(targetDate);
+                tryDate.setDate(tryDate.getDate() - dayOffset);
+                
+                // 跳过周末
+                if (tryDate.getDay() === 0 || tryDate.getDay() === 6) continue;
+                
+                const dateStr = `${tryDate.getFullYear()}${String(tryDate.getMonth() + 1).padStart(2, '0')}${String(tryDate.getDate()).padStart(2, '0')}`;
+                
+                try {
+                    const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dateStr}&stockNo=${stockCodePadded}`;
+                    
+                    const response = await httpRequest(twseUrl, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                            // 解析 TWSE 返回的数据格式
+                            // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
+                            const monthHistory = data.data.map(item => ({
+                                date: item[0],
+                                volume: parseInt(String(item[1]).replace(/,/g, '')) || 0,
+                                amount: parseFloat(String(item[2]).replace(/,/g, '')) || 0,
+                                open: parseFloat(String(item[3]).replace(/,/g, '')) || 0,
+                                high: parseFloat(String(item[4]).replace(/,/g, '')) || 0,
+                                low: parseFloat(String(item[5]).replace(/,/g, '')) || 0,
+                                close: parseFloat(String(item[6]).replace(/,/g, '')) || 0,
+                                change: parseFloat(String(item[7]).replace(/,/g, '')) || 0,
+                                transactions: parseInt(String(item[8]).replace(/,/g, '')) || 0
+                            }));
+                            
+                            // 合并数据，避免重复
+                            for (const item of monthHistory) {
+                                if (!allHistory.find(h => h.date === item.date)) {
+                                    allHistory.push(item);
+                                }
+                            }
+                            
+                            // 如果已经获取足够的数据，就停止
+                            if (allHistory.length >= days) {
+                                break;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    // 继续尝试下一个日期
+                    continue;
+                }
+            }
+            
+            if (allHistory.length >= days) {
+                break;
+            }
         }
         
-        // 尝试获取最近的数据（TWSE API 可能需要特定日期格式）
-        const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dates[0]}&stockNo=${stockCodePadded}`;
-        
-        const response = await httpRequest(twseUrl, {
-            headers: {
-                'Accept': 'application/json'
-            }
+        // 按日期排序（从旧到新）
+        allHistory.sort((a, b) => {
+            const dateA = a.date.split('/').map(Number);
+            const dateB = b.date.split('/').map(Number);
+            // 民国年转西元年比较
+            const yearA = dateA[0] + 1911;
+            const yearB = dateB[0] + 1911;
+            if (yearA !== yearB) return yearA - yearB;
+            if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
+            return dateA[2] - dateB[2];
         });
         
-        if (response.ok) {
-            const data = await response.json();
-            if (data && data.data && Array.isArray(data.data)) {
-                // 解析 TWSE 返回的数据格式
-                // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
-                const history = data.data.map(item => ({
-                    date: item[0],
-                    volume: parseInt(String(item[1]).replace(/,/g, '')) || 0,
-                    amount: parseFloat(String(item[2]).replace(/,/g, '')) || 0,
-                    open: parseFloat(String(item[3]).replace(/,/g, '')) || 0,
-                    high: parseFloat(String(item[4]).replace(/,/g, '')) || 0,
-                    low: parseFloat(String(item[5]).replace(/,/g, '')) || 0,
-                    close: parseFloat(String(item[6]).replace(/,/g, '')) || 0,
-                    change: parseFloat(String(item[7]).replace(/,/g, '')) || 0,
-                    transactions: parseInt(String(item[8]).replace(/,/g, '')) || 0
-                })).reverse(); // 反转数组，从旧到新
-                
-                console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${history.length} 天`);
-                return history;
-            }
+        // 只取最近 N 天
+        allHistory = allHistory.slice(-days);
+        
+        if (allHistory.length > 0) {
+            console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${allHistory.length} 天`);
+            return allHistory;
         }
     } catch (err) {
         console.error(`获取历史数据失败:`, err.message);
     }
     
     // 如果失败，返回空数组
+    console.log(`⚠️ 无法获取历史数据: ${stockCodePadded}`);
     return [];
+}
+
+// 获取股票本益比等财务数据的函数
+async function fetchStockPE(ticker) {
+    const stockCode = ticker.replace(/^0+/, '');
+    const stockCodePadded = stockCode.padStart(4, '0');
+    
+    try {
+        // TWSE 本益比、殖利率及股價淨值比 API
+        // API: https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL
+        const peUrl = `https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL`;
+        
+        const peResponse = await httpRequest(peUrl, {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (peResponse.ok) {
+            const peData = await peResponse.json();
+            
+            // 查找匹配的股票
+            const stockPE = Array.isArray(peData) ? peData.find(s => {
+                const code = String(s.Code || '').trim();
+                return code === stockCodePadded || 
+                       code === stockCode || 
+                       code === ticker.padStart(4, '0');
+            }) : null;
+            
+            if (stockPE) {
+                // 解析本益比（PE Ratio）
+                // TWSE 返回格式: { Code, Name, PE, DividendYield, PB }
+                const pe = parseFloat(String(stockPE.PE || stockPE['本益比'] || 0).replace(/,/g, '')) || null;
+                console.log(`✅ 获取本益比成功: ${stockCodePadded}, PE: ${pe}`);
+                return pe;
+            }
+        }
+    } catch (err) {
+        console.error(`获取本益比失败:`, err.message);
+    }
+    
+    return null;
 }
 
 // 获取股票数据的函数（使用多种数据源）
@@ -155,6 +246,8 @@ async function fetchStockData(ticker) {
     const stockCodePadded = stockCode.padStart(4, '0'); // 补齐到4位
     
     // 方案 1: 使用台湾证券交易所 OpenAPI（官方 API，最可靠）
+    let peRatio = null;
+    
     try {
         console.log(`尝试 TWSE OpenAPI: ${stockCodePadded}`);
         
@@ -194,12 +287,15 @@ async function fetchStockData(ticker) {
                 const highestPrice = parseFloat(String(stock.HighestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
                 const lowestPrice = parseFloat(String(stock.LowestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
                 
+                // 尝试获取本益比
+                peRatio = await fetchStockPE(ticker);
+                
                 return {
                     longName: stock.Name || ticker,
                     shortName: stock.Code || ticker,
                     regularMarketPrice: closingPrice,
                     regularMarketChangePercent: changePercent,
-                    trailingPE: null,
+                    trailingPE: peRatio,
                     marketCap: null,
                     regularMarketVolume: volume,
                     regularMarketPreviousClose: previousClose,
@@ -502,11 +598,18 @@ app.post('/api/analyze', async (req, res) => {
         // 使用 gemini-2.5-flash 模型（最新版本，更快更强）
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        // 构建提示词（明确要求使用中文）
+        // 获取当前日期和时间
+        const now = new Date();
+        const currentDate = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        
+        // 构建提示词（明确要求使用中文和最新数据）
         const prompt = `
 你是一位專業的股票分析師，請使用繁體中文進行分析（專業術語如 PE、ROE、EPS 等可保留英文縮寫）。
 
-請根據以下股票數據，以「${style}」的投資風格進行分析：
+**重要提醒：當前日期為 ${currentDate} ${currentTime}，請使用最新的市場數據和資訊進行分析。請基於最新的價格、成交量、技術指標等進行綜合判斷。**
+
+請根據以下**最新**股票數據，以「${style}」的投資風格進行分析：
 
 股票代號: ${ticker}
 公司名稱: ${marketData.name}
@@ -523,12 +626,12 @@ app.post('/api/analyze', async (req, res) => {
 
 請以 JSON 格式回覆，所有內容都使用繁體中文（專業術語可保留英文縮寫），包含以下欄位：
 {
-  "summary": "簡短市場總結（1-2句話，使用繁體中文）",
-  "analysis": "詳細分析（3-5段，使用繁體中文，專業術語如 PE、ROE、EPS、PEG 等可保留英文縮寫）",
+  "summary": "簡短市場總結（1-2句話，使用繁體中文，請基於最新數據和當前市場狀況）",
+  "analysis": "詳細分析（3-5段，使用繁體中文，專業術語如 PE、ROE、EPS、PEG 等可保留英文縮寫。請結合最新價格、成交量、技術指標等進行綜合分析，考慮當前市場趨勢）",
   "action": "買進 / 賣出 / 持有",
   "risk_level": "高 / 中 / 低",
-  "bullish_points": ["看多理由1（繁體中文）", "看多理由2（繁體中文）", "看多理由3（繁體中文）"],
-  "bearish_points": ["風險警示1（繁體中文）", "風險警示2（繁體中文）", "風險警示3（繁體中文）"]
+  "bullish_points": ["看多理由1（繁體中文，基於最新數據和技術分析）", "看多理由2（繁體中文）", "看多理由3（繁體中文）"],
+  "bearish_points": ["風險警示1（繁體中文，基於最新數據和技術分析）", "風險警示2（繁體中文）", "風險警示3（繁體中文）"]
 }
 
 重要提醒：
@@ -536,6 +639,8 @@ app.post('/api/analyze', async (req, res) => {
 2. 專業術語如 PE、ROE、EPS、PEG、PB、PS、ROA、ROE、EBITDA、DCF 等可保留英文縮寫
 3. 公司名稱、行業名稱等應使用中文
 4. 請確保回覆是有效的 JSON 格式，不要包含任何額外的文字或 markdown 格式
+5. **請基於當前日期 ${currentDate} 的最新市場數據進行分析，考慮最新的價格走勢、成交量變化等技術指標**
+6. **分析時請考慮最新的市場動態、行業趨勢和公司基本面變化**
 `;
 
         // 设置 Gemini API 超时
