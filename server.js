@@ -892,7 +892,7 @@ app.get('/api/routes', (req, res) => {
 });
 
 // 请求超时处理（Railway 可能有超时限制）
-const REQUEST_TIMEOUT = 40000; // 40 秒（Railway 网关超时通常是 60 秒，但留出更多缓冲）
+const REQUEST_TIMEOUT = 35000; // 35 秒（Railway 网关超时通常是 60 秒，但留出更多缓冲）
 
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
@@ -1066,15 +1066,15 @@ ${technicalInfo}
 請以 JSON 格式回覆，所有內容都使用繁體中文（專業術語可保留英文縮寫），包含以下欄位：
 {
   "summary": "簡短市場總結（1-2句話，使用繁體中文，請基於最新數據和當前市場狀況）",
-  "analysis": "詳細專業分析（5-8段，使用繁體中文，必須包含：1)基本面分析（財務指標、盈利能力、成長性）2)技術面分析（技術指標解讀、趨勢判斷、關鍵價位）3)市場面分析（行業地位、競爭優勢、市場環境）4)風險評估（系統性風險、個股風險、流動性風險）5)投資建議（具體操作建議、時機選擇）",
+  "analysis": "詳細專業分析（2-4段，使用繁體中文，簡潔重點：1)基本面分析（財務指標、盈利能力）2)技術面分析（技術指標、趨勢）3)風險評估（主要風險）4)投資建議（操作建議）",
   "action": "買進 / 賣出 / 持有",
   "risk_level": "高 / 中 / 低",
   "target_price": "目標價位（具體數字，例如：1600-1650）",
   "stop_loss": "止損價位（具體數字，例如：1450）",
   "time_horizon": "投資時程建議（例如：短期1-3個月 / 中期3-6個月 / 長期6-12個月）",
   "position_sizing": "建議倉位配置（例如：輕倉10-20% / 中倉30-40% / 重倉50%以上）",
-  "bullish_points": ["看多理由1（繁體中文，基於最新數據和技術分析，必須具體）", "看多理由2（繁體中文，必須具體）", "看多理由3（繁體中文，必須具體）", "看多理由4（繁體中文，必須具體）"],
-  "bearish_points": ["風險警示1（繁體中文，基於最新數據和技術分析，必須具體）", "風險警示2（繁體中文，必須具體）", "風險警示3（繁體中文，必須具體）"],
+  "bullish_points": ["看多理由1（繁體中文，簡潔具體）", "看多理由2（繁體中文，簡潔具體）", "看多理由3（繁體中文，簡潔具體）"],
+  "bearish_points": ["風險警示1（繁體中文，簡潔具體）", "風險警示2（繁體中文，簡潔具體）"],
   "key_levels": {
     "support": "關鍵支撐位（具體數字）",
     "resistance": "關鍵阻力位（具體數字）",
@@ -1093,13 +1093,13 @@ ${technicalInfo}
 6. **分析時請考慮最新的市場動態、行業趨勢和公司基本面變化**
 7. **請特別強調「${currentStyle}」投資風格的觀點和建議，並提供具體的操作建議**
 8. **必須提供具體的目標價、止損價和關鍵價位，不能只說「建議關注」等模糊表述**
-9. **分析必須深入專業，包含基本面、技術面、市場面的綜合判斷**
-10. **風險評估必須具體明確，不能泛泛而談**
+9. **分析要簡潔專業，重點突出，避免冗長**
+10. **請快速回應，保持內容精簡但專業**
 `;
 
-        // 设置 Gemini API 超时（35秒，确保在总超时前完成）
+        // 设置 Gemini API 超时（25秒，确保在总超时前完成）
         const geminiTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Gemini API 超时')), 35000)
+            setTimeout(() => reject(new Error('Gemini API 超时')), 25000)
         );
         
         const result = await Promise.race([
@@ -1243,8 +1243,30 @@ ${technicalInfo}
         // --- 3. 使用已获取的历史数据（用于图表，避免重复请求以加快速度） ---
         const chartHistory = stockHistory || [];
         
-        // --- 4. 等待所有分析完成 ---
-        const analyses = await Promise.all(analysisPromises);
+        // --- 4. 等待所有分析完成（使用 Promise.allSettled 以避免一个失败导致全部失败）---
+        const analysisResults = await Promise.allSettled(analysisPromises);
+        const analyses = analysisResults.map((result, index) => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            } else {
+                console.error(`分析風格 ${analysisStyles[index]} 失敗:`, result.reason);
+                return {
+                    summary: "分析暫時無法取得，請稍後再試。",
+                    analysis: `分析失敗: ${result.reason?.message || '未知錯誤'}`,
+                    action: "持有",
+                    risk_level: "中",
+                    target_price: "N/A",
+                    stop_loss: "N/A",
+                    time_horizon: "N/A",
+                    position_sizing: "N/A",
+                    bullish_points: [],
+                    bearish_points: [],
+                    key_levels: {},
+                    industry_comparison: "N/A",
+                    catalyst: "N/A"
+                };
+            }
+        });
         
         // --- 5. 返回結果 ---
         clearTimeoutSafe();
