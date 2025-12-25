@@ -250,23 +250,29 @@ async function fetchStockPE(ticker) {
                     console.log(`找到股票本益比数据:`, stockPE);
                     
                     // 解析本益比（PE Ratio）
-                    // TWSE 可能返回的字段名: PE, 本益比, PriceEarningRatio
+                    // TWSE 返回的字段名是 PEratio（根据日志显示）
                     let pe = null;
                     
-                    // 尝试多种可能的字段名
-                    if (stockPE.PE !== undefined && stockPE.PE !== null && stockPE.PE !== '') {
+                    // 尝试多种可能的字段名（按优先级）
+                    if (stockPE.PEratio !== undefined && stockPE.PEratio !== null && stockPE.PEratio !== '') {
+                        pe = parseFloat(String(stockPE.PEratio).replace(/,/g, '')) || null;
+                        console.log(`从 PEratio 字段获取本益比: ${pe}`);
+                    } else if (stockPE.PE !== undefined && stockPE.PE !== null && stockPE.PE !== '') {
                         pe = parseFloat(String(stockPE.PE).replace(/,/g, '')) || null;
+                        console.log(`从 PE 字段获取本益比: ${pe}`);
                     } else if (stockPE['本益比'] !== undefined && stockPE['本益比'] !== null && stockPE['本益比'] !== '') {
                         pe = parseFloat(String(stockPE['本益比']).replace(/,/g, '')) || null;
+                        console.log(`从 本益比 字段获取本益比: ${pe}`);
                     } else if (stockPE.PriceEarningRatio !== undefined && stockPE.PriceEarningRatio !== null) {
                         pe = parseFloat(String(stockPE.PriceEarningRatio).replace(/,/g, '')) || null;
+                        console.log(`从 PriceEarningRatio 字段获取本益比: ${pe}`);
                     }
                     
                     if (pe && pe > 0) {
                         console.log(`✅ 获取本益比成功: ${stockCodePadded}, PE: ${pe}`);
                         return pe;
                     } else {
-                        console.log(`⚠️ 本益比数据无效: ${stockCodePadded}, PE值: ${pe}`);
+                        console.log(`⚠️ 本益比数据无效: ${stockCodePadded}, PE值: ${pe}, 原始数据:`, stockPE);
                     }
                 } else {
                     console.log(`⚠️ 未找到股票代码 ${stockCodePadded} 的本益比数据`);
