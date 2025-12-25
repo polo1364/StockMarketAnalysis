@@ -456,6 +456,23 @@ async function fetchStockData(ticker) {
                 // 尝试获取财务指标（本益比、股息率、PB等）
                 const financials = await fetchStockFinancials(ticker);
                 
+                // 获取历史数据来计算 52 週最高/最低（获取过去一年的数据）
+                let fiftyTwoWeekHigh = null;
+                let fiftyTwoWeekLow = null;
+                try {
+                    const yearHistory = await fetchStockHistory(ticker, 365); // 获取过去一年的数据
+                    if (yearHistory && yearHistory.length > 0) {
+                        const prices = yearHistory.map(h => h.close).filter(p => p > 0);
+                        if (prices.length > 0) {
+                            fiftyTwoWeekHigh = Math.max(...prices);
+                            fiftyTwoWeekLow = Math.min(...prices);
+                            console.log(`✅ 从历史数据计算 52 週最高/最低: 最高=${fiftyTwoWeekHigh}, 最低=${fiftyTwoWeekLow}`);
+                        }
+                    }
+                } catch (err) {
+                    console.error(`计算 52 週最高/最低失败:`, err.message);
+                }
+                
                 return {
                     longName: stock.Name || ticker,
                     shortName: stock.Code || ticker,
@@ -469,8 +486,8 @@ async function fetchStockData(ticker) {
                     regularMarketPreviousClose: previousClose,
                     regularMarketDayHigh: highestPrice,
                     regularMarketDayLow: lowestPrice,
-                    fiftyTwoWeekHigh: null,
-                    fiftyTwoWeekLow: null
+                    fiftyTwoWeekHigh: fiftyTwoWeekHigh,
+                    fiftyTwoWeekLow: fiftyTwoWeekLow
                 };
             } else {
                 console.log(`TWSE API 未找到股票代码: ${stockCodePadded} (尝试了: ${stockCodePadded}, ${stockCode}, ${ticker.padStart(4, '0')})`);
@@ -521,6 +538,26 @@ async function fetchStockData(ticker) {
                 // 尝试获取财务指标
                 const financials = await fetchStockFinancials(ticker);
                 
+                // 如果 Yahoo Finance 没有提供 52 週数据，尝试从历史数据计算
+                let fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh || null;
+                let fiftyTwoWeekLow = meta.fiftyTwoWeekLow || null;
+                
+                if (!fiftyTwoWeekHigh || !fiftyTwoWeekLow || fiftyTwoWeekHigh === meta.regularMarketPrice) {
+                    try {
+                        const yearHistory = await fetchStockHistory(ticker, 365);
+                        if (yearHistory && yearHistory.length > 0) {
+                            const prices = yearHistory.map(h => h.close).filter(p => p > 0);
+                            if (prices.length > 0) {
+                                fiftyTwoWeekHigh = Math.max(...prices);
+                                fiftyTwoWeekLow = Math.min(...prices);
+                                console.log(`✅ 从历史数据计算 52 週最高/最低: 最高=${fiftyTwoWeekHigh}, 最低=${fiftyTwoWeekLow}`);
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`计算 52 週最高/最低失败:`, err.message);
+                    }
+                }
+                
                 return {
                     longName: stockName,
                     shortName: meta.shortName || meta.symbol || ticker,
@@ -534,8 +571,8 @@ async function fetchStockData(ticker) {
                     regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
                     regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
                     regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
-                    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
-                    fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
+                    fiftyTwoWeekHigh: fiftyTwoWeekHigh || meta.regularMarketPrice,
+                    fiftyTwoWeekLow: fiftyTwoWeekLow || meta.regularMarketPrice
                 };
             }
         }
@@ -573,6 +610,26 @@ async function fetchStockData(ticker) {
                     // 尝试获取财务指标
                     const financials = await fetchStockFinancials(ticker);
                     
+                    // 如果 Yahoo Finance 没有提供 52 週数据，尝试从历史数据计算
+                    let fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh || null;
+                    let fiftyTwoWeekLow = meta.fiftyTwoWeekLow || null;
+                    
+                    if (!fiftyTwoWeekHigh || !fiftyTwoWeekLow || fiftyTwoWeekHigh === meta.regularMarketPrice) {
+                        try {
+                            const yearHistory = await fetchStockHistory(ticker, 365);
+                            if (yearHistory && yearHistory.length > 0) {
+                                const prices = yearHistory.map(h => h.close).filter(p => p > 0);
+                                if (prices.length > 0) {
+                                    fiftyTwoWeekHigh = Math.max(...prices);
+                                    fiftyTwoWeekLow = Math.min(...prices);
+                                    console.log(`✅ 从历史数据计算 52 週最高/最低: 最高=${fiftyTwoWeekHigh}, 最低=${fiftyTwoWeekLow}`);
+                                }
+                            }
+                        } catch (err) {
+                            console.error(`计算 52 週最高/最低失败:`, err.message);
+                        }
+                    }
+                    
                     return {
                         longName: stockName,
                         shortName: meta.shortName || meta.symbol || ticker,
@@ -586,8 +643,8 @@ async function fetchStockData(ticker) {
                         regularMarketPreviousClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice,
                         regularMarketDayHigh: meta.regularMarketDayHigh || meta.regularMarketPrice,
                         regularMarketDayLow: meta.regularMarketDayLow || meta.regularMarketPrice,
-                        fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || meta.regularMarketPrice,
-                        fiftyTwoWeekLow: meta.fiftyTwoWeekLow || meta.regularMarketPrice
+                        fiftyTwoWeekHigh: fiftyTwoWeekHigh || meta.regularMarketPrice,
+                        fiftyTwoWeekLow: fiftyTwoWeekLow || meta.regularMarketPrice
                     };
                 }
             }
