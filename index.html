@@ -123,14 +123,6 @@
                     </div>
                 </div>
 
-                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 flex flex-col justify-center items-center text-center relative overflow-hidden shadow-xl">
-                    <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10"></div>
-                    <p class="text-xs text-slate-400 uppercase tracking-wider mb-3 relative z-10">AI 建議</p>
-                    <div id="ai-action" class="text-4xl font-black mb-3 relative z-10">--</div>
-                    <div id="risk-badge" class="inline-block px-4 py-2 rounded-full text-xs font-bold bg-slate-700/50 text-slate-300 border border-slate-600 relative z-10">
-                        風險: --
-                    </div>
-                </div>
             </div>
 
             <!-- 財務指標卡片 -->
@@ -877,41 +869,6 @@
             document.getElementById('ai-summary').innerText = data.summary;
             document.getElementById('ai-analysis').innerText = data.analysis;
 
-            // 買賣建議 Badge 樣式
-            const actionEl = document.getElementById('ai-action');
-            const actionText = data.action?.toUpperCase() || "HOLD";
-            
-            // 將英文轉換為中文
-            let actionTextCN = actionText;
-            if (actionText.includes("BUY") || actionText.includes("買進")) {
-                actionTextCN = "買進";
-                actionEl.className = "text-3xl font-black text-red-500 mb-2 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]";
-            } else if (actionText.includes("SELL") || actionText.includes("賣出")) {
-                actionTextCN = "賣出";
-                actionEl.className = "text-3xl font-black text-green-500 mb-2";
-            } else {
-                actionTextCN = "持有";
-                actionEl.className = "text-3xl font-black text-yellow-500 mb-2";
-            }
-            actionEl.innerText = actionTextCN;
-
-            // 風險標籤
-            const riskEl = document.getElementById('risk-badge');
-            const riskLevel = data.risk_level?.toUpperCase() || "MEDIUM";
-            
-            // 將英文轉換為中文
-            let riskTextCN = "風險: ";
-            if (riskLevel.includes("HIGH") || riskLevel.includes("高")) {
-                riskTextCN += "高";
-                riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-900/50 text-red-300 border border-red-700";
-            } else if (riskLevel.includes("LOW") || riskLevel.includes("低")) {
-                riskTextCN += "低";
-                riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-green-900/50 text-green-300 border border-green-700";
-            } else {
-                riskTextCN += "中";
-                riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-yellow-900/50 text-yellow-300 border border-yellow-700";
-            }
-            riskEl.innerText = riskTextCN;
 
             // 清單
             document.getElementById('bull-list').innerHTML = data.bullish_points.map(p => `<li class="flex gap-2"><i class="fa-solid fa-check text-green-500 mt-1 shrink-0"></i> <span>${p}</span></li>`).join('');
