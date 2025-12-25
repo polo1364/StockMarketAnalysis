@@ -98,8 +98,90 @@ async function fetchStockHistory(ticker, days = 30) {
     const stockCode = ticker.replace(/^0+/, '');
     const stockCodePadded = stockCode.padStart(4, '0');
     
+    // 检查是否是 ETF（5位数字代码通常是 ETF）
+    const isETF = /^\d{5}$/.test(ticker) || ticker.length === 5;
+    
     try {
-        // 使用 TWSE API 获取历史数据
+        // 如果是 ETF，尝试使用 Yahoo Finance 获取历史数据
+        if (isETF) {
+            console.log(`检测到 ETF: ${ticker}，尝试使用 Yahoo Finance 获取历史数据`);
+            
+            // 尝试使用 Yahoo Finance API（通过 CORS 代理）
+            const symbolsToTry = [
+                ticker + '.TW',
+                ticker + '.TWO',
+                ticker
+            ];
+            
+            for (const symbol of symbolsToTry) {
+                try {
+                    // 使用 Yahoo Finance Chart API 获取历史数据
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1mo`)}`;
+                    
+                    const response = await httpRequest(proxyUrl, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const result = data?.chart?.result?.[0];
+                        
+                        if (result && result.timestamp && result.indicators) {
+                            const timestamps = result.timestamp || [];
+                            const quotes = result.indicators.quote[0] || {};
+                            const closes = quotes.close || [];
+                            const opens = quotes.open || [];
+                            const highs = quotes.high || [];
+                            const lows = quotes.low || [];
+                            const volumes = quotes.volume || [];
+                            
+                            const history = [];
+                            for (let i = 0; i < timestamps.length; i++) {
+                                const timestamp = timestamps[i];
+                                const close = closes[i];
+                                const open = opens[i];
+                                const high = highs[i];
+                                const low = lows[i];
+                                const volume = volumes[i];
+                                
+                                if (close && close > 0) {
+                                    const date = new Date(timestamp * 1000);
+                                    // 转换为民国年格式：113/12/25
+                                    const rocYear = date.getFullYear() - 1911;
+                                    const dateStr = `${rocYear}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+                                    
+                                    history.push({
+                                        date: dateStr,
+                                        volume: Math.round(volume || 0),
+                                        amount: 0,
+                                        open: open || close,
+                                        high: high || close,
+                                        low: low || close,
+                                        close: close,
+                                        change: i > 0 ? (close - (closes[i - 1] || close)) : 0,
+                                        transactions: 0
+                                    });
+                                }
+                            }
+                            
+                            if (history.length > 0) {
+                                // 只取最近 N 天
+                                const recentHistory = history.slice(-days);
+                                console.log(`✅ 从 Yahoo Finance 获取 ETF 历史数据成功: ${symbol}, 共 ${recentHistory.length} 天`);
+                                return recentHistory;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error(`Yahoo Finance 获取 ${symbol} 历史数据失败:`, err.message);
+                    continue;
+                }
+            }
+        }
+        
+        // 使用 TWSE API 获取历史数据（普通股票）
         // TWSE STOCK_DAY API 需要指定日期，格式：YYYYMMDD
         const today = new Date();
         let allHistory = [];
