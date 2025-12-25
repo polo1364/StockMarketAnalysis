@@ -7,6 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* 自定義動畫 */
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -104,6 +105,26 @@
                     <div id="ai-action" class="text-3xl font-black text-white mb-2">--</div>
                     <div id="risk-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300">
                         Risk: --
+                    </div>
+                </div>
+            </div>
+
+            <!-- 技術線圖和交易量圖表 -->
+            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in">
+                <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                    <h3 class="text-blue-400 font-bold mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line"></i> 技術線圖
+                    </h3>
+                    <div class="relative h-64">
+                        <canvas id="price-chart"></canvas>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-700 bg-slate-800/50">
+                    <h3 class="text-blue-400 font-bold mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-bar"></i> 每日交易量
+                    </h3>
+                    <div class="relative h-48">
+                        <canvas id="volume-chart"></canvas>
                     </div>
                 </div>
             </div>
@@ -303,6 +324,196 @@
             // 清單
             document.getElementById('bull-list').innerHTML = data.bullish_points.map(p => `<li class="flex gap-2"><i class="fa-solid fa-check text-green-500 mt-1 shrink-0"></i> <span>${p}</span></li>`).join('');
             document.getElementById('bear-list').innerHTML = data.bearish_points.map(p => `<li class="flex gap-2"><i class="fa-solid fa-triangle-exclamation text-red-500 mt-1 shrink-0"></i> <span>${p}</span></li>`).join('');
+            
+            // --- C. 渲染圖表 ---
+            if (data.history && data.history.length > 0) {
+                renderCharts(data.history);
+            } else {
+                // 如果没有历史数据，隐藏图表区域或显示提示
+                console.log('没有历史数据');
+            }
+        }
+        
+        // --- 4. 渲染圖表 ---
+        let priceChart = null;
+        let volumeChart = null;
+        
+        function renderCharts(history) {
+            // 准备数据
+            const labels = history.map(h => {
+                // 转换日期格式：113/12/22 -> 2024/12/22
+                const dateParts = h.date.split('/');
+                if (dateParts.length === 3) {
+                    const year = parseInt(dateParts[0]) + 1911; // 民国年转西元年
+                    return `${year}/${dateParts[1]}/${dateParts[2]}`;
+                }
+                return h.date;
+            });
+            
+            const closePrices = history.map(h => h.close);
+            const openPrices = history.map(h => h.open);
+            const highPrices = history.map(h => h.high);
+            const lowPrices = history.map(h => h.low);
+            const volumes = history.map(h => h.volume);
+            
+            // 销毁旧图表（如果存在）
+            if (priceChart) {
+                priceChart.destroy();
+            }
+            if (volumeChart) {
+                volumeChart.destroy();
+            }
+            
+            // 创建价格图表
+            const priceCtx = document.getElementById('price-chart').getContext('2d');
+            priceChart = new Chart(priceCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '收盤價',
+                            data: closePrices,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: '開盤價',
+                            data: openPrices,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 1,
+                            fill: false,
+                            tension: 0.4
+                        },
+                        {
+                            label: '最高價',
+                            data: highPrices,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 1,
+                            fill: false,
+                            tension: 0.4,
+                            borderDash: [5, 5]
+                        },
+                        {
+                            label: '最低價',
+                            data: lowPrices,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderWidth: 1,
+                            fill: false,
+                            tension: 0.4,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#cbd5e1'
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: '#94a3b8',
+                                maxRotation: 45,
+                                minRotation: 45
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.1)'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#94a3b8'
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 创建交易量图表
+            const volumeCtx = document.getElementById('volume-chart').getContext('2d');
+            volumeChart = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '交易量',
+                        data: volumes,
+                        backgroundColor: volumes.map((v, i) => {
+                            // 根据涨跌显示不同颜色
+                            const change = history[i].change || 0;
+                            return change >= 0 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)';
+                        }),
+                        borderColor: volumes.map((v, i) => {
+                            const change = history[i].change || 0;
+                            return change >= 0 ? 'rgba(239, 68, 68, 1)' : 'rgba(34, 197, 94, 1)';
+                        }),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return '交易量: ' + context.parsed.y.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: '#94a3b8',
+                                maxRotation: 45,
+                                minRotation: 45
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.1)'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#94a3b8',
+                                callback: function(value) {
+                                    if (value >= 1000000) {
+                                        return (value / 1000000).toFixed(1) + 'M';
+                                    } else if (value >= 1000) {
+                                        return (value / 1000).toFixed(1) + 'K';
+                                    }
+                                    return value;
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
         }
     </script>
 </body>

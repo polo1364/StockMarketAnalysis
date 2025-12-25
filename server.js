@@ -93,6 +93,61 @@ async function httpRequest(url, options = {}) {
     }
 }
 
+// 获取股票历史数据的函数（用于图表显示）
+async function fetchStockHistory(ticker, days = 30) {
+    const stockCode = ticker.replace(/^0+/, '');
+    const stockCodePadded = stockCode.padStart(4, '0');
+    
+    try {
+        // 使用 TWSE API 获取历史数据
+        // 获取最近30天的数据
+        const today = new Date();
+        const dates = [];
+        for (let i = 0; i < days; i++) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+            dates.push(dateStr);
+        }
+        
+        // 尝试获取最近的数据（TWSE API 可能需要特定日期格式）
+        const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dates[0]}&stockNo=${stockCodePadded}`;
+        
+        const response = await httpRequest(twseUrl, {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.data && Array.isArray(data.data)) {
+                // 解析 TWSE 返回的数据格式
+                // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
+                const history = data.data.map(item => ({
+                    date: item[0],
+                    volume: parseInt(String(item[1]).replace(/,/g, '')) || 0,
+                    amount: parseFloat(String(item[2]).replace(/,/g, '')) || 0,
+                    open: parseFloat(String(item[3]).replace(/,/g, '')) || 0,
+                    high: parseFloat(String(item[4]).replace(/,/g, '')) || 0,
+                    low: parseFloat(String(item[5]).replace(/,/g, '')) || 0,
+                    close: parseFloat(String(item[6]).replace(/,/g, '')) || 0,
+                    change: parseFloat(String(item[7]).replace(/,/g, '')) || 0,
+                    transactions: parseInt(String(item[8]).replace(/,/g, '')) || 0
+                })).reverse(); // 反转数组，从旧到新
+                
+                console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${history.length} 天`);
+                return history;
+            }
+        }
+    } catch (err) {
+        console.error(`获取历史数据失败:`, err.message);
+    }
+    
+    // 如果失败，返回空数组
+    return [];
+}
+
 // 获取股票数据的函数（使用多种数据源）
 async function fetchStockData(ticker) {
     // 处理台股代号（支持4位和5位数字）
@@ -515,7 +570,11 @@ app.post('/api/analyze', async (req, res) => {
             };
         }
 
-        // --- 3. 返回結果 ---
+        // --- 3. 获取历史数据（用于图表） ---
+        console.log(`正在获取历史数据: ${ticker}`);
+        const history = await fetchStockHistory(ticker, 30);
+        
+        // --- 4. 返回結果 ---
         clearTimeoutSafe();
         
         if (res.headersSent) {
@@ -525,6 +584,7 @@ app.post('/api/analyze', async (req, res) => {
         
         res.json({
             market_data: marketData,
+            history: history, // 添加历史数据
             summary: aiAnalysis.summary || "分析完成",
             analysis: aiAnalysis.analysis || "",
             action: aiAnalysis.action || "HOLD",
