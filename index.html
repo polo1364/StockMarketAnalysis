@@ -10,12 +10,85 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* 自定義動畫 */
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
         .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .animate-slide-in { animation: slideIn 0.3s ease-out forwards; }
+        .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         
-        /* 台灣股市顏色習慣：紅漲綠跌 (可依個人習慣修改) */
-        .stock-up { color: #ef4444; }   /* 紅色 */
-        .stock-down { color: #22c55e; } /* 綠色 */
+        /* 台灣股市顏色習慣：紅漲綠跌 */
+        .stock-up { color: #ef4444; }
+        .stock-down { color: #22c55e; }
+        
+        /* 統一卡片樣式 */
+        .card-base {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+            transition: all 0.3s ease;
+        }
+        .card-base:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 0 20px rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        /* 統一按鈕樣式 */
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px -5px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* 標籤頁樣式優化 */
+        .style-tab-btn {
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        .style-tab-btn:hover {
+            background: rgba(51, 65, 85, 0.3);
+        }
+        
+        /* 滾動條樣式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 0.9);
+        }
+        
+        /* 輸入框聚焦效果 */
+        input:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        /* 漸變背景 */
+        .gradient-bg {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-200 font-sans min-h-screen flex flex-col items-center p-4 md:p-8">
@@ -37,60 +110,69 @@
         </div>
     </div>
 
-    <header class="w-full max-w-4xl flex justify-between items-center mb-8 pb-6 border-b border-slate-800">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                <i class="fa-solid fa-robot"></i>
+    <header class="w-full max-w-6xl flex justify-between items-center mb-6 pb-4 border-b border-slate-700/50">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-robot text-lg"></i>
             </div>
             <div>
-                <h1 class="text-xl font-bold text-white">AI 股票分析師</h1>
-                <p class="text-xs text-slate-500">由 Yahoo Finance 和 Gemini 提供</p>
+                <h1 class="text-2xl font-bold text-white tracking-tight">AI 股票分析師</h1>
+                <p class="text-xs text-slate-400 mt-0.5">由 TWSE 和 Google Gemini 提供專業分析</p>
             </div>
         </div>
-        <button onclick="showModal()" class="text-slate-500 hover:text-white transition text-sm">
-            <i class="fa-solid fa-gear mr-1"></i> 設定 Key
+        <button onclick="showModal()" class="text-slate-400 hover:text-white transition-all text-sm px-4 py-2 rounded-lg hover:bg-slate-800/50 flex items-center gap-2">
+            <i class="fa-solid fa-gear"></i> 
+            <span class="hidden sm:inline">設定 Key</span>
         </button>
     </header>
 
-    <main class="w-full max-w-4xl flex-1 flex flex-col gap-6">
+    <main class="w-full max-w-6xl flex-1 flex flex-col gap-6">
         
-        <div class="bg-slate-800 p-2 rounded-2xl flex flex-col md:flex-row gap-2 shadow-lg border border-slate-700">
+        <!-- 搜尋區域 -->
+        <div class="card-base p-3 rounded-2xl flex flex-col md:flex-row gap-3 shadow-xl">
             <div class="flex-1 relative">
-                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
-                <input id="ticker-input" type="text" placeholder="輸入代號 (如 2330, NVDA, TSLA)" 
-                    class="w-full bg-slate-900/50 border-none rounded-xl pl-12 pr-4 py-4 text-white placeholder-slate-500 focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none transition uppercase"
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 z-10"></i>
+                <input id="ticker-input" type="text" placeholder="輸入股票代號 (如 2330, 3481, NVDA)" 
+                    class="w-full bg-slate-900/60 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3.5 text-white placeholder-slate-500 focus:bg-slate-900 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all uppercase font-medium"
                     onkeypress="if(event.key==='Enter') analyzeStock()">
             </div>
             
-            <div class="bg-slate-900/50 text-white px-6 py-4 rounded-xl border-none outline-none flex items-center gap-2">
+            <div class="bg-slate-900/40 text-slate-300 px-5 py-3.5 rounded-xl border border-slate-700/50 flex items-center gap-2.5 text-sm font-medium">
                 <i class="fa-solid fa-chart-line text-blue-400"></i>
-                <span class="text-sm font-medium">全風格分析</span>
+                <span class="hidden sm:inline">全風格分析</span>
+                <span class="sm:hidden">全分析</span>
             </div>
             
-            <button onclick="saveCurrentStock()" id="save-btn" class="bg-green-600 hover:bg-green-500 text-white px-4 py-4 rounded-xl font-bold transition shadow-lg shadow-green-600/20 whitespace-nowrap flex items-center justify-center gap-2" title="儲存當前股票">
+            <button onclick="saveCurrentStock()" id="save-btn" 
+                class="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white px-5 py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-green-600/20 whitespace-nowrap flex items-center justify-center gap-2 hover:scale-105" 
+                title="儲存當前股票">
                 <i class="fa-solid fa-bookmark"></i>
+                <span class="hidden sm:inline">儲存</span>
             </button>
             
-            <button onclick="analyzeStock()" id="analyze-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-bold transition shadow-lg shadow-blue-600/20 whitespace-nowrap flex items-center justify-center gap-2">
-                <span>AI 分析</span> <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <button onclick="analyzeStock()" id="analyze-btn" 
+                class="btn-primary text-white px-6 py-3.5 rounded-xl font-bold shadow-lg shadow-blue-600/30 whitespace-nowrap flex items-center justify-center gap-2">
+                <span>AI 分析</span> 
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
             </button>
         </div>
 
         <!-- 已保存的股票列表 -->
-        <div id="saved-stocks-container" class="bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-slate-700 p-4 shadow-lg">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-bold text-slate-300 flex items-center gap-2">
+        <div id="saved-stocks-container" class="card-base rounded-2xl p-5 shadow-lg">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2.5">
                     <i class="fa-solid fa-star text-yellow-400"></i>
-                    已保存的股票
+                    <span>已保存的股票</span>
                 </h3>
-                <button onclick="clearAllSavedStocks()" class="text-xs text-slate-500 hover:text-red-400 transition">
-                    <i class="fa-solid fa-trash"></i> 清除全部
+                <button onclick="clearAllSavedStocks()" class="text-xs text-slate-400 hover:text-red-400 transition-all px-2 py-1 rounded hover:bg-red-500/10 flex items-center gap-1.5">
+                    <i class="fa-solid fa-trash text-xs"></i> 
+                    <span class="hidden sm:inline">清除全部</span>
                 </button>
             </div>
-            <div id="saved-stocks-list" class="flex flex-wrap gap-2">
+            <div id="saved-stocks-list" class="flex flex-wrap gap-2.5">
                 <!-- 已保存的股票會動態插入這裡 -->
             </div>
-            <p id="no-saved-stocks" class="text-xs text-slate-500 text-center py-2 hidden">尚未保存任何股票</p>
+            <p id="no-saved-stocks" class="text-xs text-slate-500 text-center py-3 hidden">尚未保存任何股票</p>
         </div>
 
         <div id="loading" class="hidden py-20 text-center">
@@ -102,144 +184,143 @@
         <div id="result-area" class="hidden flex flex-col gap-6">
             
             <!-- 主要股票信息卡片 -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 md:col-span-2 flex justify-between items-center relative overflow-hidden shadow-xl">
-                    <div class="absolute top-0 right-0 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                    <div class="z-10">
-                        <h2 id="stock-name" class="text-2xl font-bold text-white mb-2">--</h2>
-                        <div class="flex items-center gap-3 text-sm text-slate-400">
-                            <span class="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-lg text-xs font-semibold border border-blue-500/30">即時行情</span>
-                            <span id="stock-pe" class="flex items-center gap-1">
-                                <i class="fa-solid fa-chart-pie text-xs"></i>
-                                <span>本益比: --</span>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="text-right z-10">
-                        <div id="stock-price" class="text-5xl font-mono font-bold text-white tracking-tighter mb-1">--</div>
-                        <div id="stock-change" class="text-xl font-bold flex items-center justify-end gap-1">
-                            <span>--%</span>
-                        </div>
+            <div class="card-base rounded-2xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center relative overflow-hidden shadow-2xl">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full blur-3xl -mr-32 -mt-32"></div>
+                <div class="z-10 flex-1">
+                    <h2 id="stock-name" class="text-3xl md:text-4xl font-bold text-white mb-3 tracking-tight">--</h2>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg text-xs font-semibold border border-blue-500/30 backdrop-blur-sm">即時行情</span>
+                        <span id="stock-pe" class="flex items-center gap-1.5 text-sm text-slate-300">
+                            <i class="fa-solid fa-chart-pie text-xs text-blue-400"></i>
+                            <span>本益比: --</span>
+                        </span>
                     </div>
                 </div>
-
+                <div class="text-right z-10 mt-4 md:mt-0">
+                    <div id="stock-price" class="text-4xl md:text-6xl font-mono font-bold text-white tracking-tighter mb-2">--</div>
+                    <div id="stock-change" class="text-xl md:text-2xl font-bold flex items-center justify-end gap-2">
+                        <span>--%</span>
+                    </div>
+                </div>
             </div>
 
             <!-- 財務指標卡片 -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-blue-500/50 transition-all shadow-lg hover:shadow-blue-500/10">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                            <i class="fa-solid fa-chart-pie text-blue-400"></i>
+                <div class="card-base p-5 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-blue-500/30">
+                            <i class="fa-solid fa-chart-pie text-blue-400 text-lg"></i>
                         </div>
-                        <div>
-                            <p class="text-xs text-slate-400">本益比</p>
-                            <p id="metric-pe" class="text-lg font-bold text-white">--</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-green-500/50 transition-all shadow-lg hover:shadow-green-500/10">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-                            <i class="fa-solid fa-coins text-green-400"></i>
-                        </div>
-                        <div>
-                            <p class="text-xs text-slate-400">股息率</p>
-                            <p id="metric-dividend" class="text-lg font-bold text-white">--</p>
+                        <div class="flex-1">
+                            <p class="text-xs text-slate-400 mb-1 font-medium">本益比</p>
+                            <p id="metric-pe" class="text-xl font-bold text-white">--</p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-purple-500/50 transition-all shadow-lg hover:shadow-purple-500/10">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                            <i class="fa-solid fa-building text-purple-400"></i>
+                <div class="card-base p-5 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-green-500/30">
+                            <i class="fa-solid fa-coins text-green-400 text-lg"></i>
                         </div>
-                        <div>
-                            <p class="text-xs text-slate-400">股價淨值比</p>
-                            <p id="metric-pb" class="text-lg font-bold text-white">--</p>
+                        <div class="flex-1">
+                            <p class="text-xs text-slate-400 mb-1 font-medium">股息率</p>
+                            <p id="metric-dividend" class="text-xl font-bold text-white">--</p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="bg-slate-800/80 backdrop-blur-sm p-5 rounded-xl border border-slate-700 hover:border-yellow-500/50 transition-all shadow-lg hover:shadow-yellow-500/10">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
-                            <i class="fa-solid fa-chart-bar text-yellow-400"></i>
+                <div class="card-base p-5 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-purple-500/30">
+                            <i class="fa-solid fa-building text-purple-400 text-lg"></i>
                         </div>
-                        <div>
-                            <p class="text-xs text-slate-400">成交量</p>
-                            <p id="metric-volume" class="text-lg font-bold text-white">--</p>
+                        <div class="flex-1">
+                            <p class="text-xs text-slate-400 mb-1 font-medium">股價淨值比</p>
+                            <p id="metric-pb" class="text-xl font-bold text-white">--</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-base p-5 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-yellow-500/30">
+                            <i class="fa-solid fa-chart-bar text-yellow-400 text-lg"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs text-slate-400 mb-1 font-medium">成交量</p>
+                            <p id="metric-volume" class="text-xl font-bold text-white">--</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- 價格區間卡片 -->
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
-                    <p class="text-xs text-slate-400 mb-1">前收盤</p>
-                    <p id="metric-prev-close" class="text-lg font-semibold text-slate-200">--</p>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div class="card-base p-4 rounded-xl">
+                    <p class="text-xs text-slate-400 mb-2 font-medium">前收盤</p>
+                    <p id="metric-prev-close" class="text-lg font-bold text-slate-200">--</p>
                 </div>
-                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
-                    <p class="text-xs text-slate-400 mb-1">今日最高</p>
-                    <p id="metric-high" class="text-lg font-semibold text-red-400">--</p>
+                <div class="card-base p-4 rounded-xl">
+                    <p class="text-xs text-slate-400 mb-2 font-medium">今日最高</p>
+                    <p id="metric-high" class="text-lg font-bold text-red-400">--</p>
                 </div>
-                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
-                    <p class="text-xs text-slate-400 mb-1">今日最低</p>
-                    <p id="metric-low" class="text-lg font-semibold text-green-400">--</p>
+                <div class="card-base p-4 rounded-xl">
+                    <p class="text-xs text-slate-400 mb-2 font-medium">今日最低</p>
+                    <p id="metric-low" class="text-lg font-bold text-green-400">--</p>
                 </div>
-                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
-                    <p class="text-xs text-slate-400 mb-1">52週最高</p>
-                    <p id="metric-52w-high" class="text-lg font-semibold text-red-300">--</p>
+                <div class="card-base p-4 rounded-xl">
+                    <p class="text-xs text-slate-400 mb-2 font-medium">52週最高</p>
+                    <p id="metric-52w-high" class="text-lg font-bold text-red-300">--</p>
                 </div>
-                <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
-                    <p class="text-xs text-slate-400 mb-1">52週最低</p>
-                    <p id="metric-52w-low" class="text-lg font-semibold text-green-300">--</p>
+                <div class="card-base p-4 rounded-xl">
+                    <p class="text-xs text-slate-400 mb-2 font-medium">52週最低</p>
+                    <p id="metric-52w-low" class="text-lg font-bold text-green-300">--</p>
                 </div>
             </div>
 
             <!-- 技術線圖和交易量圖表 -->
-            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in">
-                <div class="p-6 border-b border-slate-700 bg-slate-800/50">
-                    <h3 class="text-blue-400 font-bold mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-line"></i> 技術線圖
+            <div class="card-base rounded-2xl overflow-hidden animate-fade-in">
+                <div class="p-6 border-b border-slate-700/50 bg-gradient-to-r from-slate-800/50 to-transparent">
+                    <h3 class="text-blue-400 font-bold text-lg mb-4 flex items-center gap-2.5">
+                        <i class="fa-solid fa-chart-line"></i> 
+                        <span>技術線圖</span>
                     </h3>
-                    <div class="relative h-64">
+                    <div class="relative h-72 bg-slate-900/30 rounded-lg p-2">
                         <canvas id="price-chart"></canvas>
                     </div>
                 </div>
-                <div class="p-6 border-t border-slate-700 bg-slate-800/50">
-                    <h3 class="text-blue-400 font-bold mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-bar"></i> 每日交易量
+                <div class="p-6 bg-gradient-to-r from-slate-800/50 to-transparent">
+                    <h3 class="text-blue-400 font-bold text-lg mb-4 flex items-center gap-2.5">
+                        <i class="fa-solid fa-chart-bar"></i> 
+                        <span>每日交易量</span>
                     </h3>
-                    <div class="relative h-48">
+                    <div class="relative h-56 bg-slate-900/30 rounded-lg p-2">
                         <canvas id="volume-chart"></canvas>
                     </div>
                 </div>
             </div>
 
             <!-- 多風格分析結果（標籤頁切換） -->
-            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+            <div class="card-base rounded-2xl overflow-hidden">
                 <!-- 標籤按鈕 -->
-                <div class="flex border-b border-slate-700 bg-slate-800/50 overflow-x-auto">
-                    <button onclick="switchStyleTab(0)" id="style-tab-0" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-blue-400 text-blue-400 bg-slate-800/50">
-                        💎 價值投資
+                <div class="flex border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-slate-800/50 overflow-x-auto">
+                    <button onclick="switchStyleTab(0)" id="style-tab-0" class="style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-blue-400 text-blue-400 bg-slate-800/30 min-w-[140px]">
+                        <span class="text-lg mr-2">💎</span> 價值投資
                     </button>
-                    <button onclick="switchStyleTab(1)" id="style-tab-1" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200">
-                        ⚡ 短線當沖
+                    <button onclick="switchStyleTab(1)" id="style-tab-1" class="style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200 min-w-[140px]">
+                        <span class="text-lg mr-2">⚡</span> 短線當沖
                     </button>
-                    <button onclick="switchStyleTab(2)" id="style-tab-2" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200">
-                        🚀 成長型投資
+                    <button onclick="switchStyleTab(2)" id="style-tab-2" class="style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200 min-w-[140px]">
+                        <span class="text-lg mr-2">🚀</span> 成長型投資
                     </button>
-                    <button onclick="switchStyleTab(3)" id="style-tab-3" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200">
-                        🛡️ 保守存股
+                    <button onclick="switchStyleTab(3)" id="style-tab-3" class="style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200 min-w-[140px]">
+                        <span class="text-lg mr-2">🛡️</span> 保守存股
                     </button>
                 </div>
                 
                 <!-- 分析結果內容區域 -->
-                <div id="multi-style-analysis" class="p-6">
+                <div id="multi-style-analysis" class="p-6 md:p-8">
                     <!-- 動態插入當前選中風格的分析結果 -->
                 </div>
             </div>
@@ -673,9 +754,9 @@
                     if (i === index) {
                         const style = styles[i];
                         const colors = colorMap[style?.color] || colorMap.blue;
-                        tabBtn.className = `style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 ${colors.active} bg-slate-800/50`;
+                        tabBtn.className = `style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 ${colors.active} bg-slate-800/30 min-w-[140px]`;
                     } else {
-                        tabBtn.className = `style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200`;
+                        tabBtn.className = `style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200 min-w-[140px]`;
                     }
                 }
             }
