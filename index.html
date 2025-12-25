@@ -707,20 +707,61 @@
             if (analysis) {
                 container.innerHTML = `
                     <div class="animate-fade-in">
-                        <div class="mb-4 flex items-center gap-3">
-                            <span class="px-4 py-2 rounded-lg text-sm font-bold ${colors.bg} ${colors.text} border ${colors.border}">
-                                ${analysis.action || '--'}
-                            </span>
-                            <span class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-700 text-slate-300">
-                                風險: ${analysis.risk_level || '--'}
-                            </span>
+                        <!-- 操作建議卡片 -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div class="text-xs text-slate-400 mb-1">操作建議</div>
+                                <div class="text-lg font-bold ${colors.text}">${analysis.action || '--'}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div class="text-xs text-slate-400 mb-1">風險等級</div>
+                                <div class="text-lg font-bold text-slate-200">${analysis.risk_level || '--'}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div class="text-xs text-slate-400 mb-1">目標價</div>
+                                <div class="text-lg font-bold text-green-400">${analysis.target_price || 'N/A'}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div class="text-xs text-slate-400 mb-1">止損價</div>
+                                <div class="text-lg font-bold text-red-400">${analysis.stop_loss || 'N/A'}</div>
+                            </div>
                         </div>
                         
+                        <!-- 投資參數 -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div class="text-xs text-slate-400 mb-1">投資時程</div>
+                                <div class="text-sm font-semibold text-slate-200">${analysis.time_horizon || 'N/A'}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                                <div class="text-xs text-slate-400 mb-1">建議倉位</div>
+                                <div class="text-sm font-semibold text-slate-200">${analysis.position_sizing || 'N/A'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 關鍵價位 -->
+                        ${analysis.key_levels && (analysis.key_levels.support || analysis.key_levels.resistance) ? `
+                        <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700 mb-6">
+                            <h4 class="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line"></i> 關鍵價位
+                            </h4>
+                            <div class="grid grid-cols-3 gap-3 text-sm">
+                                ${analysis.key_levels.support ? `<div><span class="text-slate-400">支撐位:</span> <span class="text-green-400 font-bold">${analysis.key_levels.support}</span></div>` : ''}
+                                ${analysis.key_levels.resistance ? `<div><span class="text-slate-400">阻力位:</span> <span class="text-red-400 font-bold">${analysis.key_levels.resistance}</span></div>` : ''}
+                                ${analysis.key_levels.breakout ? `<div><span class="text-slate-400">突破位:</span> <span class="text-yellow-400 font-bold">${analysis.key_levels.breakout}</span></div>` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- 市場總結 -->
                         <div class="mb-6">
-                            <h3 class="text-lg font-bold text-slate-200 mb-3">市場總結</h3>
-                            <p class="text-slate-200 leading-relaxed italic text-base">${analysis.summary || '分析中...'}</p>
+                            <h3 class="text-lg font-bold text-slate-200 mb-3 flex items-center gap-2">
+                                <i class="fa-solid fa-chart-pie"></i> 市場總結
+                            </h3>
+                            <p class="text-slate-200 leading-relaxed italic text-base bg-slate-900/30 rounded-lg p-4 border border-slate-700">${analysis.summary || '分析中...'}</p>
                         </div>
                         
+                        <!-- 看多訊號與風險警示 -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div class="bg-slate-900/50 rounded-xl p-5 border border-slate-700">
                                 <h4 class="text-green-400 font-bold mb-4 flex items-center gap-2">
@@ -746,8 +787,31 @@
                             </div>
                         </div>
                         
+                        <!-- 行業對比 -->
+                        ${analysis.industry_comparison && analysis.industry_comparison !== 'N/A' ? `
+                        <div class="bg-slate-900/50 rounded-xl p-5 border border-slate-700 mb-6">
+                            <h4 class="text-blue-400 font-bold mb-3 flex items-center gap-2">
+                                <i class="fa-solid fa-building"></i> 行業對比分析
+                            </h4>
+                            <p class="text-slate-300 leading-6 text-sm">${analysis.industry_comparison}</p>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- 潛在催化劑 -->
+                        ${analysis.catalyst && analysis.catalyst !== 'N/A' ? `
+                        <div class="bg-slate-900/50 rounded-xl p-5 border border-slate-700 mb-6">
+                            <h4 class="text-yellow-400 font-bold mb-3 flex items-center gap-2">
+                                <i class="fa-solid fa-bolt"></i> 潛在催化劑
+                            </h4>
+                            <p class="text-slate-300 leading-6 text-sm">${analysis.catalyst}</p>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- 詳細分析 -->
                         <div class="bg-slate-900/30 rounded-xl p-5 border border-slate-700">
-                            <h4 class="text-slate-400 text-xs font-bold uppercase mb-3 tracking-wider">詳細分析</h4>
+                            <h4 class="text-slate-400 text-xs font-bold uppercase mb-3 tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-file-lines"></i> 詳細專業分析
+                            </h4>
                             <p class="text-slate-300 leading-7 text-sm text-justify whitespace-pre-wrap">${analysis.analysis || '分析中...'}</p>
                         </div>
                     </div>

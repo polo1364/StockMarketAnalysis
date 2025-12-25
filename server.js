@@ -839,7 +839,23 @@ app.post('/api/analyze', async (req, res) => {
             console.log('注意：使用演示數據');
         }
 
-        // --- 2. 使用 Gemini AI 进行多风格分析 ---
+        // --- 2. 获取历史数据和技术指标 ---
+        console.log('正在获取历史数据和技术指标...');
+        const stockHistory = await fetchStockHistory(ticker, 60); // 获取60天数据用于技术分析
+        const technicalIndicators = stockHistory && stockHistory.length >= 14 ? calculateTechnicalIndicators(stockHistory) : null;
+        
+        if (technicalIndicators) {
+            console.log('技术指标计算完成:', {
+                RSI: technicalIndicators.rsi?.toFixed(2),
+                MACD: technicalIndicators.macd?.toFixed(2),
+                MA5: technicalIndicators.ma5?.toFixed(2),
+                MA20: technicalIndicators.ma20?.toFixed(2),
+                Support: technicalIndicators.support?.toFixed(2),
+                Resistance: technicalIndicators.resistance?.toFixed(2)
+            });
+        }
+        
+        // --- 3. 使用 Gemini AI 进行多风格分析 ---
         console.log(`正在使用 Gemini AI 分析股票，風格數量: ${analysisStyles.length}`);
         const genAI = new GoogleGenerativeAI(apiKey);
         
@@ -856,19 +872,37 @@ app.post('/api/analyze', async (req, res) => {
             try {
                 console.log(`正在分析風格: ${currentStyle}`);
                 
+                // 构建技术指标说明
+                let technicalInfo = '';
+                if (technicalIndicators) {
+                    technicalInfo = `
+技術指標分析：
+- RSI (相對強弱指標): ${technicalIndicators.rsi?.toFixed(2)} ${technicalIndicators.rsi > 70 ? '(超買)' : technicalIndicators.rsi < 30 ? '(超賣)' : '(正常)'}
+- MACD: ${technicalIndicators.macd?.toFixed(2)}, 信號線: ${technicalIndicators.signal?.toFixed(2)}, 柱狀圖: ${technicalIndicators.histogram?.toFixed(2)}
+- 移動平均線: MA5=${technicalIndicators.ma5?.toFixed(2)}, MA10=${technicalIndicators.ma10?.toFixed(2)}, MA20=${technicalIndicators.ma20?.toFixed(2)}
+- 布林帶: 上軌=${technicalIndicators.bollingerUpper?.toFixed(2)}, 中軌=${technicalIndicators.bollingerMiddle?.toFixed(2)}, 下軌=${technicalIndicators.bollingerLower?.toFixed(2)}
+- 技術支撐位: ${technicalIndicators.support?.toFixed(2)}
+- 技術阻力位: ${technicalIndicators.resistance?.toFixed(2)}
+- 當前價格相對位置: ${((marketData.price - technicalIndicators.support) / (technicalIndicators.resistance - technicalIndicators.support) * 100).toFixed(1)}%
+`;
+                }
+                
                 // 构建提示词（明确要求使用中文和最新数据）
                 const prompt = `
-你是一位專業的股票分析師，請使用繁體中文進行分析（專業術語如 PE、ROE、EPS 等可保留英文縮寫）。
+你是一位資深專業的股票分析師，擁有20年以上的投資經驗，請使用繁體中文進行深度分析（專業術語如 PE、ROE、EPS、RSI、MACD 等可保留英文縮寫）。
 
 **重要提醒：當前日期為 ${currentDate} ${currentTime}，請使用最新的市場數據和資訊進行分析。請基於最新的價格、成交量、技術指標等進行綜合判斷。**
 
-請根據以下**最新**股票數據，以「${currentStyle}」的投資風格進行分析：
+請根據以下**最新**股票數據，以「${currentStyle}」的投資風格進行專業深度分析：
 
+【基本資料】
 股票代號: ${ticker}
 公司名稱: ${marketData.name}
 當前價格: ${marketData.price}
 漲跌幅: ${marketData.change}
 本益比 (PE): ${marketData.pe}
+市淨率 (PB): ${marketData.pb || 'N/A'}
+股息率: ${marketData.dividendYield || 'N/A'}
 市值: ${marketData.marketCap.toLocaleString()}
 成交量: ${marketData.volume.toLocaleString()}
 前收盤價: ${marketData.previousClose}
@@ -877,24 +911,41 @@ app.post('/api/analyze', async (req, res) => {
 52週最高: ${marketData.fiftyTwoWeekHigh}
 52週最低: ${marketData.fiftyTwoWeekLow}
 
+${technicalInfo}
+
+【分析要求】
 請以 JSON 格式回覆，所有內容都使用繁體中文（專業術語可保留英文縮寫），包含以下欄位：
 {
   "summary": "簡短市場總結（1-2句話，使用繁體中文，請基於最新數據和當前市場狀況）",
-  "analysis": "詳細分析（3-5段，使用繁體中文，專業術語如 PE、ROE、EPS、PEG 等可保留英文縮寫。請結合最新價格、成交量、技術指標等進行綜合分析，考慮當前市場趨勢）",
+  "analysis": "詳細專業分析（5-8段，使用繁體中文，必須包含：1)基本面分析（財務指標、盈利能力、成長性）2)技術面分析（技術指標解讀、趨勢判斷、關鍵價位）3)市場面分析（行業地位、競爭優勢、市場環境）4)風險評估（系統性風險、個股風險、流動性風險）5)投資建議（具體操作建議、時機選擇）",
   "action": "買進 / 賣出 / 持有",
   "risk_level": "高 / 中 / 低",
-  "bullish_points": ["看多理由1（繁體中文，基於最新數據和技術分析）", "看多理由2（繁體中文）", "看多理由3（繁體中文）"],
-  "bearish_points": ["風險警示1（繁體中文，基於最新數據和技術分析）", "風險警示2（繁體中文）", "風險警示3（繁體中文）"]
+  "target_price": "目標價位（具體數字，例如：1600-1650）",
+  "stop_loss": "止損價位（具體數字，例如：1450）",
+  "time_horizon": "投資時程建議（例如：短期1-3個月 / 中期3-6個月 / 長期6-12個月）",
+  "position_sizing": "建議倉位配置（例如：輕倉10-20% / 中倉30-40% / 重倉50%以上）",
+  "bullish_points": ["看多理由1（繁體中文，基於最新數據和技術分析，必須具體）", "看多理由2（繁體中文，必須具體）", "看多理由3（繁體中文，必須具體）", "看多理由4（繁體中文，必須具體）"],
+  "bearish_points": ["風險警示1（繁體中文，基於最新數據和技術分析，必須具體）", "風險警示2（繁體中文，必須具體）", "風險警示3（繁體中文，必須具體）"],
+  "key_levels": {
+    "support": "關鍵支撐位（具體數字）",
+    "resistance": "關鍵阻力位（具體數字）",
+    "breakout": "突破價位（具體數字，如果適用）"
+  },
+  "industry_comparison": "行業對比分析（與同業比較PE、PB、成長性等，繁體中文）",
+  "catalyst": "潛在催化劑（可能影響股價的重大事件或因素，繁體中文）"
 }
 
 重要提醒：
 1. 所有文字內容必須使用繁體中文
-2. 專業術語如 PE、ROE、EPS、PEG、PB、PS、ROA、ROE、EBITDA、DCF 等可保留英文縮寫
+2. 專業術語如 PE、ROE、EPS、PEG、PB、PS、ROA、EBITDA、DCF、RSI、MACD、MA、KD、布林帶等可保留英文縮寫
 3. 公司名稱、行業名稱等應使用中文
 4. 請確保回覆是有效的 JSON 格式，不要包含任何額外的文字或 markdown 格式
 5. **請基於當前日期 ${currentDate} 的最新市場數據進行分析，考慮最新的價格走勢、成交量變化等技術指標**
 6. **分析時請考慮最新的市場動態、行業趨勢和公司基本面變化**
-7. **請特別強調「${currentStyle}」投資風格的觀點和建議**
+7. **請特別強調「${currentStyle}」投資風格的觀點和建議，並提供具體的操作建議**
+8. **必須提供具體的目標價、止損價和關鍵價位，不能只說「建議關注」等模糊表述**
+9. **分析必須深入專業，包含基本面、技術面、市場面的綜合判斷**
+10. **風險評估必須具體明確，不能泛泛而談**
 `;
 
         // 设置 Gemini API 超时
@@ -947,9 +998,8 @@ app.post('/api/analyze', async (req, res) => {
             }
         });
 
-        // --- 3. 获取历史数据（用于图表） ---
-        console.log(`正在获取历史数据: ${ticker}`);
-        const history = await fetchStockHistory(ticker, 30);
+        // --- 3. 获取历史数据（用于图表，如果之前没有获取或需要更多数据） ---
+        const chartHistory = stockHistory && stockHistory.length >= 30 ? stockHistory.slice(-30) : await fetchStockHistory(ticker, 30);
         
         // --- 4. 等待所有分析完成 ---
         const analyses = await Promise.all(analysisPromises);
@@ -967,13 +1017,21 @@ app.post('/api/analyze', async (req, res) => {
             const singleAnalysis = analyses[0] || {};
             res.json({
                 market_data: marketData,
+                technical_indicators: technicalIndicators,
                 summary: singleAnalysis.summary,
                 analysis: singleAnalysis.analysis,
                 action: singleAnalysis.action,
                 risk_level: singleAnalysis.risk_level,
+                target_price: singleAnalysis.target_price,
+                stop_loss: singleAnalysis.stop_loss,
+                time_horizon: singleAnalysis.time_horizon,
+                position_sizing: singleAnalysis.position_sizing,
                 bullish_points: singleAnalysis.bullish_points,
                 bearish_points: singleAnalysis.bearish_points,
-                history: history
+                key_levels: singleAnalysis.key_levels,
+                industry_comparison: singleAnalysis.industry_comparison,
+                catalyst: singleAnalysis.catalyst,
+                history: chartHistory
             });
         } else {
             // 多个风格，返回所有分析结果
@@ -981,18 +1039,26 @@ app.post('/api/analyze', async (req, res) => {
                 style: analysisStyles[index],
                 summary: analysis.summary || '分析中...',
                 analysis: analysis.analysis || '分析中...',
-                action: analysis.action || 'HOLD',
+                action: analysis.action || '持有',
                 risk_level: analysis.risk_level || '中',
+                target_price: analysis.target_price || 'N/A',
+                stop_loss: analysis.stop_loss || 'N/A',
+                time_horizon: analysis.time_horizon || 'N/A',
+                position_sizing: analysis.position_sizing || 'N/A',
                 bullish_points: analysis.bullish_points || [],
-                bearish_points: analysis.bearish_points || []
+                bearish_points: analysis.bearish_points || [],
+                key_levels: analysis.key_levels || {},
+                industry_comparison: analysis.industry_comparison || 'N/A',
+                catalyst: analysis.catalyst || 'N/A'
             }));
             
             console.log(`返回 ${formattedAnalyses.length} 个风格的分析结果`);
             
             res.json({
                 market_data: marketData,
+                technical_indicators: technicalIndicators,
                 analyses: formattedAnalyses,
-                history: history
+                history: chartHistory
             });
         }
 
