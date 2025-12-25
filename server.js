@@ -525,8 +525,8 @@ app.post('/api/analyze', async (req, res) => {
 {
   "summary": "簡短市場總結（1-2句話，使用繁體中文）",
   "analysis": "詳細分析（3-5段，使用繁體中文，專業術語如 PE、ROE、EPS、PEG 等可保留英文縮寫）",
-  "action": "BUY / SELL / HOLD",
-  "risk_level": "Low / Medium / High",
+  "action": "買進 / 賣出 / 持有",
+  "risk_level": "高 / 中 / 低",
   "bullish_points": ["看多理由1（繁體中文）", "看多理由2（繁體中文）", "看多理由3（繁體中文）"],
   "bearish_points": ["風險警示1（繁體中文）", "風險警示2（繁體中文）", "風險警示3（繁體中文）"]
 }

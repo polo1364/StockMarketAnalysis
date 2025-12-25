@@ -43,8 +43,8 @@
                 <i class="fa-solid fa-robot"></i>
             </div>
             <div>
-                <h1 class="text-xl font-bold text-white">AI Stock Analyst</h1>
-                <p class="text-xs text-slate-500">Powered by Yahoo Finance & Gemini</p>
+                <h1 class="text-xl font-bold text-white">AI 股票分析師</h1>
+                <p class="text-xs text-slate-500">由 Yahoo Finance 和 Gemini 提供</p>
             </div>
         </div>
         <button onclick="showModal()" class="text-slate-500 hover:text-white transition text-sm">
@@ -89,7 +89,7 @@
                         <h2 id="stock-name" class="text-2xl font-bold text-white mb-1">--</h2>
                         <div class="flex items-center gap-2 text-sm text-slate-400">
                             <span class="bg-slate-700 px-2 py-0.5 rounded text-xs">即時行情</span>
-                            <span id="stock-pe">PE: --</span>
+                            <span id="stock-pe">本益比: --</span>
                         </div>
                     </div>
                     <div class="text-right z-10">
@@ -101,10 +101,10 @@
                 </div>
 
                 <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 flex flex-col justify-center items-center text-center relative overflow-hidden">
-                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">AI Recommendation</p>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">AI 建議</p>
                     <div id="ai-action" class="text-3xl font-black text-white mb-2">--</div>
                     <div id="risk-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300">
-                        Risk: --
+                        風險: --
                     </div>
                 </div>
             </div>
@@ -140,26 +140,26 @@
                 <div class="grid grid-cols-1 md:grid-cols-2">
                     <div class="p-6 border-r border-slate-700 border-b md:border-b-0 border-slate-700/50">
                         <h4 class="text-green-400 font-bold mb-4 flex items-center gap-2">
-                            <i class="fa-solid fa-arrow-trend-up"></i> 看多訊號 (Bullish)
+                            <i class="fa-solid fa-arrow-trend-up"></i> 看多訊號
                         </h4>
                         <ul id="bull-list" class="space-y-3 text-sm text-slate-300"></ul>
                     </div>
                     <div class="p-6">
                         <h4 class="text-red-400 font-bold mb-4 flex items-center gap-2">
-                            <i class="fa-solid fa-triangle-exclamation"></i> 風險警示 (Bearish)
+                            <i class="fa-solid fa-triangle-exclamation"></i> 風險警示
                         </h4>
                         <ul id="bear-list" class="space-y-3 text-sm text-slate-300"></ul>
                     </div>
                 </div>
 
                 <div class="p-6 bg-slate-900/30 border-t border-slate-700">
-                    <h4 class="text-slate-400 text-xs font-bold uppercase mb-3 tracking-wider">Detailed Analysis</h4>
+                    <h4 class="text-slate-400 text-xs font-bold uppercase mb-3 tracking-wider">詳細分析</h4>
                     <p id="ai-analysis" class="text-slate-300 leading-7 text-sm text-justify">...</p>
                 </div>
             </div>
 
             <p class="text-center text-xs text-slate-600 pb-8">
-                Disclaimer: AI 分析僅供參考，不代表投資建議。股市數據由 Yahoo Finance 提供，可能有延遲。
+                免責聲明：AI 分析僅供參考，不代表投資建議。股市數據由 Yahoo Finance 提供，可能有延遲。
             </p>
         </div>
 
@@ -279,7 +279,7 @@
             document.getElementById('stock-name').innerText = m.name;
             // 處理小數點顯示
             document.getElementById('stock-price').innerText = m.price.toLocaleString(); 
-            document.getElementById('stock-pe').innerText = `PE: ${m.pe}`;
+            document.getElementById('stock-pe').innerText = `本益比: ${m.pe}`;
             
             // 如果是演示數據，顯示提示
             if (m.isDemo) {
@@ -308,18 +308,38 @@
             // 買賣建議 Badge 樣式
             const actionEl = document.getElementById('ai-action');
             const actionText = data.action?.toUpperCase() || "HOLD";
-            actionEl.innerText = actionText;
             
-            if (actionText.includes("BUY")) actionEl.className = "text-3xl font-black text-red-500 mb-2 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]"; // 買進亮紅
-            else if (actionText.includes("SELL")) actionEl.className = "text-3xl font-black text-green-500 mb-2"; // 賣出綠色
-            else actionEl.className = "text-3xl font-black text-yellow-500 mb-2"; // 觀望黃色
+            // 將英文轉換為中文
+            let actionTextCN = actionText;
+            if (actionText.includes("BUY") || actionText.includes("買進")) {
+                actionTextCN = "買進";
+                actionEl.className = "text-3xl font-black text-red-500 mb-2 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]";
+            } else if (actionText.includes("SELL") || actionText.includes("賣出")) {
+                actionTextCN = "賣出";
+                actionEl.className = "text-3xl font-black text-green-500 mb-2";
+            } else {
+                actionTextCN = "持有";
+                actionEl.className = "text-3xl font-black text-yellow-500 mb-2";
+            }
+            actionEl.innerText = actionTextCN;
 
             // 風險標籤
             const riskEl = document.getElementById('risk-badge');
-            riskEl.innerText = `Risk: ${data.risk_level}`;
-            if (data.risk_level === 'High') riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-900/50 text-red-300 border border-red-700";
-            else if (data.risk_level === 'Low') riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-green-900/50 text-green-300 border border-green-700";
-            else riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-yellow-900/50 text-yellow-300 border border-yellow-700";
+            const riskLevel = data.risk_level?.toUpperCase() || "MEDIUM";
+            
+            // 將英文轉換為中文
+            let riskTextCN = "風險: ";
+            if (riskLevel.includes("HIGH") || riskLevel.includes("高")) {
+                riskTextCN += "高";
+                riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-900/50 text-red-300 border border-red-700";
+            } else if (riskLevel.includes("LOW") || riskLevel.includes("低")) {
+                riskTextCN += "低";
+                riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-green-900/50 text-green-300 border border-green-700";
+            } else {
+                riskTextCN += "中";
+                riskEl.className = "inline-block px-3 py-1 rounded-full text-xs font-bold bg-yellow-900/50 text-yellow-300 border border-yellow-700";
+            }
+            riskEl.innerText = riskTextCN;
 
             // 清單
             document.getElementById('bull-list').innerHTML = data.bullish_points.map(p => `<li class="flex gap-2"><i class="fa-solid fa-check text-green-500 mt-1 shrink-0"></i> <span>${p}</span></li>`).join('');
