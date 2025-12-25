@@ -195,6 +195,8 @@ async function fetchStockPE(ticker) {
         // API: https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL
         const peUrl = `https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL`;
         
+        console.log(`尝试获取本益比: ${stockCodePadded}, URL: ${peUrl}`);
+        
         const peResponse = await httpRequest(peUrl, {
             headers: {
                 'Accept': 'application/json'
@@ -203,25 +205,56 @@ async function fetchStockPE(ticker) {
         
         if (peResponse.ok) {
             const peData = await peResponse.json();
+            console.log(`本益比 API 返回数据，类型: ${Array.isArray(peData) ? '数组' : typeof peData}, 长度: ${Array.isArray(peData) ? peData.length : 'N/A'}`);
             
-            // 查找匹配的股票
-            const stockPE = Array.isArray(peData) ? peData.find(s => {
-                const code = String(s.Code || '').trim();
-                return code === stockCodePadded || 
-                       code === stockCode || 
-                       code === ticker.padStart(4, '0');
-            }) : null;
-            
-            if (stockPE) {
-                // 解析本益比（PE Ratio）
-                // TWSE 返回格式: { Code, Name, PE, DividendYield, PB }
-                const pe = parseFloat(String(stockPE.PE || stockPE['本益比'] || 0).replace(/,/g, '')) || null;
-                console.log(`✅ 获取本益比成功: ${stockCodePadded}, PE: ${pe}`);
-                return pe;
+            if (Array.isArray(peData) && peData.length > 0) {
+                // 查看第一个数据项的字段结构（用于调试）
+                if (peData[0]) {
+                    console.log(`本益比 API 数据示例字段:`, Object.keys(peData[0]));
+                }
+                
+                // 查找匹配的股票
+                const stockPE = peData.find(s => {
+                    const code = String(s.Code || s.代號 || '').trim();
+                    return code === stockCodePadded || 
+                           code === stockCode || 
+                           code === ticker.padStart(4, '0');
+                });
+                
+                if (stockPE) {
+                    console.log(`找到股票本益比数据:`, stockPE);
+                    
+                    // 解析本益比（PE Ratio）
+                    // TWSE 可能返回的字段名: PE, 本益比, PriceEarningRatio
+                    let pe = null;
+                    
+                    // 尝试多种可能的字段名
+                    if (stockPE.PE !== undefined && stockPE.PE !== null && stockPE.PE !== '') {
+                        pe = parseFloat(String(stockPE.PE).replace(/,/g, '')) || null;
+                    } else if (stockPE['本益比'] !== undefined && stockPE['本益比'] !== null && stockPE['本益比'] !== '') {
+                        pe = parseFloat(String(stockPE['本益比']).replace(/,/g, '')) || null;
+                    } else if (stockPE.PriceEarningRatio !== undefined && stockPE.PriceEarningRatio !== null) {
+                        pe = parseFloat(String(stockPE.PriceEarningRatio).replace(/,/g, '')) || null;
+                    }
+                    
+                    if (pe && pe > 0) {
+                        console.log(`✅ 获取本益比成功: ${stockCodePadded}, PE: ${pe}`);
+                        return pe;
+                    } else {
+                        console.log(`⚠️ 本益比数据无效: ${stockCodePadded}, PE值: ${pe}`);
+                    }
+                } else {
+                    console.log(`⚠️ 未找到股票代码 ${stockCodePadded} 的本益比数据`);
+                }
+            } else {
+                console.log(`⚠️ 本益比 API 返回的数据不是数组或为空`);
             }
+        } else {
+            console.log(`⚠️ 本益比 API 返回状态码: ${peResponse.status}`);
         }
     } catch (err) {
         console.error(`获取本益比失败:`, err.message);
+        console.error(`错误堆栈:`, err.stack);
     }
     
     return null;
