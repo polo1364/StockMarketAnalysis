@@ -145,8 +145,8 @@
         <div class="card-base p-3 rounded-2xl flex flex-col md:flex-row gap-3 shadow-xl">
             <div class="flex-1 relative">
                 <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 z-10"></i>
-                <input id="ticker-input" type="text" placeholder="輸入股票代號 (如 2330, 3481, NVDA)" 
-                    class="w-full bg-slate-900/60 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3.5 text-white placeholder-slate-500 focus:bg-slate-900 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all uppercase font-medium"
+                <input id="ticker-input" type="text" placeholder="輸入股票代號或名稱 (如 2330、台積電、3481)" 
+                    class="w-full bg-slate-900/60 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3.5 text-white placeholder-slate-500 focus:bg-slate-900 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all font-medium"
                     onkeypress="if(event.key==='Enter') analyzeStock()">
             </div>
             
@@ -207,15 +207,15 @@
                             <i class="fa-solid fa-chart-pie text-xs text-blue-400"></i>
                             <span>本益比: --</span>
                         </span>
+                        </div>
                     </div>
-                </div>
                 <div class="text-right z-10 mt-4 md:mt-0">
                     <div id="stock-price" class="text-4xl md:text-6xl font-mono font-bold text-white tracking-tighter mb-2">--</div>
                     <div id="stock-change" class="text-xl md:text-2xl font-bold flex items-center justify-end gap-2">
-                        <span>--%</span>
+                            <span>--%</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
             <!-- 財務指標卡片 -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -227,10 +227,10 @@
                         <div class="flex-1">
                             <p class="text-xs text-slate-400 mb-1 font-medium">本益比</p>
                             <p id="metric-pe" class="text-xl font-bold text-white">--</p>
-                        </div>
                     </div>
                 </div>
-                
+            </div>
+
                 <div class="card-base p-5 rounded-xl">
                     <div class="flex items-center gap-3 mb-3">
                         <div class="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-green-500/30">
@@ -439,10 +439,11 @@
         
         // 保存当前股票
         async function saveCurrentStock() {
-            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            let input = document.getElementById('ticker-input').value.trim();
+            const ticker = convertStockNameToTicker(input).toUpperCase();
             
             if (!ticker) {
-                alert("請先輸入股票代號！");
+                alert("請先輸入股票代號或名稱！");
                 return;
             }
             
@@ -532,7 +533,8 @@
         
         // 更新已保存股票的名称（如果股票已保存）
         function updateSavedStockName(name) {
-            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            let input = document.getElementById('ticker-input').value.trim();
+            const ticker = convertStockNameToTicker(input).toUpperCase();
             const saved = JSON.parse(localStorage.getItem('savedStocks') || '[]');
             const stockIndex = saved.findIndex(s => s.ticker === ticker);
             
@@ -546,13 +548,104 @@
         // 页面加载时加载已保存的股票
         loadSavedStocks();
         
+        // 台灣股票名稱到代號的映射表（常見股票）
+        const stockNameMap = {
+            '台積電': '2330', '台積': '2330', 'TSMC': '2330',
+            '聯發科': '2454', '聯發': '2454', 'MediaTek': '2454',
+            '鴻海': '2317', '鴻海精密': '2317', 'Foxconn': '2317',
+            '台達電': '2308', '台達': '2308', 'Delta': '2308',
+            '中華電': '2412', '中華電信': '2412', 'CHT': '2412',
+            '富邦金': '2881', '富邦': '2881', 'Fubon': '2881',
+            '國泰金': '2882', '國泰': '2882', 'Cathay': '2882',
+            '中鋼': '2002', '中鋼公司': '2002', 'CSC': '2002',
+            '台塑': '1301', '台塑公司': '1301', 'Formosa': '1301',
+            '南亞': '1303', '南亞塑膠': '1303',
+            '台化': '1326', '台灣化學': '1326',
+            '統一': '1216', '統一企業': '1216', 'Uni-President': '1216',
+            '大立光': '3008', '大立': '3008', 'Largan': '3008',
+            '聯詠': '3034', '聯詠科技': '3034',
+            '瑞昱': '2379', '瑞昱半導體': '2379', 'Realtek': '2379',
+            '群創': '3481', '群創光電': '3481', 'Innolux': '3481',
+            '友達': '2409', '友達光電': '2409', 'AUO': '2409',
+            '長榮': '2603', '長榮海運': '2603', 'Evergreen': '2603',
+            '陽明': '2609', '陽明海運': '2609', 'Yang Ming': '2609',
+            '萬海': '2615', '萬海航運': '2615', 'Wan Hai': '2615',
+            '元大台灣50': '0050', '台灣50': '0050', '0050': '0050',
+            '元大高股息': '0056', '高股息': '0056', '0056': '0056',
+            '元大台灣價值高息': '00940', '00940': '00940', '價值高息': '00940',
+            '台新金': '2887', '台新': '2887',
+            '玉山金': '2884', '玉山': '2884',
+            '第一金': '2892', '第一': '2892',
+            '兆豐金': '2886', '兆豐': '2886',
+            '華南金': '2880', '華南': '2880',
+            '開發金': '2883', '開發': '2883',
+            '中信金': '2891', '中信': '2891',
+            '永豐金': '2890', '永豐': '2890',
+            '新光金': '2888', '新光': '2888',
+            '合庫金': '5880', '合庫': '5880',
+            '日月光': '3711', '日月光投控': '3711', 'ASE': '3711',
+            '廣達': '2382', '廣達電腦': '2382', 'Quanta': '2382',
+            '仁寶': '2324', '仁寶電腦': '2324', 'Compal': '2324',
+            '和碩': '4938', '和碩聯合': '4938', 'Pegatron': '4938',
+            '英業達': '2356', '英業': '2356', 'Inventec': '2356',
+            '微星': '2377', '微星科技': '2377', 'MSI': '2377',
+            '技嘉': '2376', '技嘉科技': '2376', 'Gigabyte': '2376',
+            '華碩': '2357', '華碩電腦': '2357', 'ASUS': '2357',
+            '宏碁': '2353', '宏碁電腦': '2353', 'Acer': '2353',
+            '可成': '2474', '可成科技': '2474', 'Catcher': '2474',
+            '台泥': '1101', '台灣水泥': '1101',
+            '亞泥': '1102', '亞洲水泥': '1102',
+            '遠傳': '4904', '遠傳電信': '4904', 'Far EasTone': '4904',
+            '台灣大': '3045', '台灣大哥大': '3045', 'Taiwan Mobile': '3045',
+            '統一超': '2912', '統一超商': '2912', '7-Eleven': '2912',
+            '全家': '5903', '全家便利': '5903', 'FamilyMart': '5903',
+            '中租': '5871', '中租控股': '5871',
+            '裕隆': '2201', '裕隆汽車': '2201', 'Yulon': '2201',
+            '和泰車': '2207', '和泰汽車': '2207', 'Hotai': '2207',
+            '豐田': '2207', 'Toyota': '2207'
+        };
+        
+        // 將中文股票名稱轉換為股票代號
+        function convertStockNameToTicker(input) {
+            const trimmed = input.trim();
+            
+            // 如果是純數字，直接返回（可能是股票代號）
+            if (/^\d{4,5}$/.test(trimmed)) {
+                return trimmed;
+            }
+            
+            // 檢查映射表
+            const ticker = stockNameMap[trimmed] || stockNameMap[trimmed.toUpperCase()];
+            if (ticker) {
+                return ticker;
+            }
+            
+            // 嘗試部分匹配（例如輸入"台積"也能找到"台積電"）
+            for (const [name, code] of Object.entries(stockNameMap)) {
+                if (name.includes(trimmed) || trimmed.includes(name)) {
+                    return code;
+                }
+            }
+            
+            // 如果找不到，返回原始輸入（讓後端處理）
+            return trimmed;
+        }
+        
         // --- 3. 核心功能：分析股票 ---
         async function analyzeStock() {
-            const ticker = document.getElementById('ticker-input').value.trim();
+            let input = document.getElementById('ticker-input').value.trim();
             
-            if (!ticker) {
-                alert("請輸入股票代號！");
+            if (!input) {
+                alert("請輸入股票代號或名稱！");
                 return;
+            }
+            
+            // 轉換中文名稱為股票代號
+            const ticker = convertStockNameToTicker(input);
+            
+            // 如果轉換成功且與輸入不同，更新輸入框顯示
+            if (ticker !== input && stockNameMap[input] || stockNameMap[input.toUpperCase()]) {
+                document.getElementById('ticker-input').value = ticker;
             }
 
             // 使用所有4種投資風格
@@ -577,7 +670,7 @@
                         'Content-Type': 'application/json',
                         'x-api-key': apiKey 
                     },
-                    body: JSON.stringify({ ticker, styles: styles.map(s => s.value) })
+                    body: JSON.stringify({ ticker: ticker.toUpperCase().replace(/^0+/, ''), styles: styles.map(s => s.value) })
                 });
 
                 // 處理錯誤狀態碼
@@ -1178,45 +1271,66 @@
                 return;
             }
             
-            // 准备数据
-            const labels = history.map(h => {
-                try {
-                    // 转换日期格式：113/12/22 -> 2024/12/22
-                    const dateParts = h.date.split('/');
-                    if (dateParts.length === 3) {
-                        const year = parseInt(dateParts[0]) + 1911; // 民国年转西元年
-                        return `${year}/${dateParts[1]}/${dateParts[2]}`;
-                    }
-                    return h.date;
-                } catch (e) {
-                    console.error('日期转换失败:', h.date, e);
-                    return h.date;
+            // 确保 result-area 可见，这样 canvas 元素才能被访问
+            const resultArea = document.getElementById('result-area');
+            if (resultArea && resultArea.classList.contains('hidden')) {
+                resultArea.classList.remove('hidden');
+            }
+            
+            // 使用 requestAnimationFrame 确保 DOM 已更新
+            requestAnimationFrame(() => {
+                // 检查 canvas 元素是否存在
+                const priceCanvas = document.getElementById('price-chart');
+                const volumeCanvas = document.getElementById('volume-chart');
+                
+                if (!priceCanvas || !volumeCanvas) {
+                    console.error('找不到 chart canvas 元素，price-chart:', !!priceCanvas, 'volume-chart:', !!volumeCanvas);
+                    // 如果找不到，延迟重试
+                    setTimeout(() => renderCharts(history), 100);
+                    return;
                 }
-            });
-            
-            const closePrices = history.map(h => parseFloat(h.close) || 0);
-            const openPrices = history.map(h => parseFloat(h.open) || 0);
-            const highPrices = history.map(h => parseFloat(h.high) || 0);
-            const lowPrices = history.map(h => parseFloat(h.low) || 0);
-            const volumes = history.map(h => parseInt(h.volume) || 0);
-            
-            console.log('图表数据准备完成:', {
-                labels: labels.length,
-                closePrices: closePrices.length,
-                volumes: volumes.length
-            });
-            
-            // 销毁旧图表（如果存在）
-            if (priceChart) {
-                priceChart.destroy();
-            }
-            if (volumeChart) {
-                volumeChart.destroy();
-            }
-            
-            // 创建价格图表
-            const priceCtx = document.getElementById('price-chart').getContext('2d');
-            priceChart = new Chart(priceCtx, {
+                
+                // 准备数据
+                const labels = history.map(h => {
+                    try {
+                        // 转换日期格式：113/12/22 -> 2024/12/22
+                        const dateParts = h.date.split('/');
+                        if (dateParts.length === 3) {
+                            const year = parseInt(dateParts[0]) + 1911; // 民国年转西元年
+                            return `${year}/${dateParts[1]}/${dateParts[2]}`;
+                        }
+                        return h.date;
+                    } catch (e) {
+                        console.error('日期转换失败:', h.date, e);
+                        return h.date;
+                    }
+                });
+                
+                const closePrices = history.map(h => parseFloat(h.close) || 0);
+                const openPrices = history.map(h => parseFloat(h.open) || 0);
+                const highPrices = history.map(h => parseFloat(h.high) || 0);
+                const lowPrices = history.map(h => parseFloat(h.low) || 0);
+                const volumes = history.map(h => parseInt(h.volume) || 0);
+                
+                console.log('图表数据准备完成:', {
+                    labels: labels.length,
+                    closePrices: closePrices.length,
+                    volumes: volumes.length
+                });
+                
+                // 销毁旧图表（如果存在）
+                if (priceChart) {
+                    priceChart.destroy();
+                    priceChart = null;
+                }
+                if (volumeChart) {
+                    volumeChart.destroy();
+                    volumeChart = null;
+                }
+                
+                // 创建价格图表
+                const priceCtx = priceCanvas.getContext('2d');
+                priceChart = new Chart(priceCtx, {
                 type: 'line',
                 data: {
                     labels: labels,
@@ -1296,11 +1410,11 @@
                         }
                     }
                 }
-            });
-            
-            // 创建交易量图表
-            const volumeCtx = document.getElementById('volume-chart').getContext('2d');
-            volumeChart = new Chart(volumeCtx, {
+                });
+                
+                // 创建交易量图表
+                const volumeCtx = volumeCanvas.getContext('2d');
+                volumeChart = new Chart(volumeCtx, {
                 type: 'bar',
                 data: {
                     labels: labels,
@@ -1363,6 +1477,7 @@
                         }
                     }
                 }
+            });
             });
         }
     </script>
