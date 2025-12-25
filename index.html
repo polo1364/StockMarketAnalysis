@@ -519,7 +519,143 @@
             }
         }
 
-        // --- 3. 渲染畫面 ---
+        // --- 3. 渲染多風格分析結果 ---
+        function renderMultiStyleData(data, styles) {
+            document.getElementById('result-area').classList.remove('hidden');
+            const m = data.market_data;
+
+            // --- A. 填寫市場數據 ---
+            document.getElementById('stock-name').innerText = m.name;
+            document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
+            document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+            
+            if (m.isDemo) {
+                document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
+            }
+            
+            // 填寫財務指標
+            document.getElementById('metric-pe').innerText = m.pe;
+            document.getElementById('metric-dividend').innerText = m.dividendYield !== 'N/A' ? `${m.dividendYield}%` : 'N/A';
+            document.getElementById('metric-pb').innerText = m.pb;
+            document.getElementById('metric-volume').innerText = m.volume > 0 ? (m.volume >= 1000000 ? `${(m.volume / 1000000).toFixed(2)}M` : m.volume >= 1000 ? `${(m.volume / 1000).toFixed(1)}K` : m.volume.toLocaleString()) : 'N/A';
+            
+            // 填寫價格區間
+            document.getElementById('metric-prev-close').innerText = m.previousClose > 0 ? m.previousClose.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-high').innerText = m.dayHigh > 0 ? m.dayHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-low').innerText = m.dayLow > 0 ? m.dayLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-52w-high').innerText = m.fiftyTwoWeekHigh > 0 ? m.fiftyTwoWeekHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            document.getElementById('metric-52w-low').innerText = m.fiftyTwoWeekLow > 0 ? m.fiftyTwoWeekLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+
+            // 處理漲跌顏色
+            const changeStr = m.change || "0%";
+            const isUp = !changeStr.includes('-');
+            const changeEl = document.getElementById('stock-change');
+            changeEl.innerText = changeStr;
+            if (isUp) {
+                changeEl.className = "text-xl font-bold flex items-center justify-end gap-1 stock-up";
+                changeEl.innerHTML += ' <i class="fa-solid fa-caret-up"></i>';
+            } else {
+                changeEl.className = "text-xl font-bold flex items-center justify-end gap-1 stock-down";
+                changeEl.innerHTML += ' <i class="fa-solid fa-caret-down"></i>';
+            }
+
+            // 更新已保存的股票列表
+            updateSavedStockName(m.name);
+
+            // 渲染圖表
+            if (data.history && data.history.length > 0) {
+                renderCharts(data.history);
+            } else {
+                const priceChartContainer = document.getElementById('price-chart').parentElement;
+                const volumeChartContainer = document.getElementById('volume-chart').parentElement;
+                priceChartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-slate-500"><p>暫無歷史數據，無法顯示技術線圖</p></div>';
+                volumeChartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-slate-500"><p>暫無歷史數據，無法顯示技術線圖</p></div>';
+            }
+
+            // 渲染多風格分析結果
+            const container = document.getElementById('multi-style-analysis');
+            container.innerHTML = '';
+            
+            // 檢查是否有分析結果
+            const analyses = data.analyses || [];
+            
+            styles.forEach((style, index) => {
+                const analysis = analyses[index] || analyses.find(a => a.style === style.value) || null;
+                
+                const styleCard = document.createElement('div');
+                styleCard.className = 'bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in';
+                
+                const colorClasses = {
+                    blue: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
+                    yellow: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+                    purple: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
+                    green: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30' }
+                };
+                
+                const colors = colorClasses[style.color] || colorClasses.blue;
+                
+                if (analysis) {
+                    styleCard.innerHTML = `
+                        <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                            <h3 class="${colors.text} font-bold mb-2 flex items-center gap-2">
+                                <span class="text-2xl">${style.label.split(' ')[0]}</span>
+                                <span>${style.label}</span>
+                            </h3>
+                            <div class="flex items-center gap-3 mt-3">
+                                <span class="px-3 py-1 rounded-full text-xs font-bold ${colors.bg} ${colors.text} border ${colors.border}">
+                                    ${analysis.action || '--'}
+                                </span>
+                                <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300">
+                                    風險: ${analysis.risk_level || '--'}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <p class="text-lg text-slate-200 leading-relaxed italic mb-4">${analysis.summary || '分析中...'}</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                <div>
+                                    <h4 class="text-green-400 font-bold mb-3 flex items-center gap-2 text-sm">
+                                        <i class="fa-solid fa-arrow-trend-up"></i> 看多訊號
+                                    </h4>
+                                    <ul class="space-y-2 text-sm text-slate-300">
+                                        ${(analysis.bullish_points || []).map(point => `<li class="flex items-start gap-2"><i class="fa-solid fa-check text-green-400 mt-1"></i><span>${point}</span></li>`).join('')}
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 class="text-red-400 font-bold mb-3 flex items-center gap-2 text-sm">
+                                        <i class="fa-solid fa-triangle-exclamation"></i> 風險警示
+                                    </h4>
+                                    <ul class="space-y-2 text-sm text-slate-300">
+                                        ${(analysis.bearish_points || []).map(point => `<li class="flex items-start gap-2"><i class="fa-solid fa-exclamation text-red-400 mt-1"></i><span>${point}</span></li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="mt-4 p-4 bg-slate-900/30 rounded-lg border-t border-slate-700">
+                                <h4 class="text-slate-400 text-xs font-bold uppercase mb-2 tracking-wider">詳細分析</h4>
+                                <p class="text-slate-300 leading-6 text-sm text-justify">${analysis.analysis || '分析中...'}</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    styleCard.innerHTML = `
+                        <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                            <h3 class="${colors.text} font-bold mb-2 flex items-center gap-2">
+                                <span class="text-2xl">${style.label.split(' ')[0]}</span>
+                                <span>${style.label}</span>
+                            </h3>
+                        </div>
+                        <div class="p-6 text-center">
+                            <div class="inline-block w-8 h-8 border-2 border-slate-700 border-t-${style.color}-500 rounded-full animate-spin mb-2"></div>
+                            <p class="text-slate-400">分析中...</p>
+                        </div>
+                    `;
+                }
+                
+                container.appendChild(styleCard);
+            });
+        }
+        
+        // --- 4. 渲染畫面（單風格，保留以備用） ---
         function renderData(data) {
             document.getElementById('result-area').classList.remove('hidden');
             const m = data.market_data;
