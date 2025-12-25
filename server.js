@@ -100,72 +100,60 @@ async function fetchStockHistory(ticker, days = 30) {
     
     try {
         // 使用 TWSE API 获取历史数据
-        // 尝试多个日期，因为可能遇到非交易日
+        // 获取最近一个月的完整数据（TWSE API 按月份返回）
         const today = new Date();
+        const lastMonth = new Date(today);
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        
+        // 尝试获取上个月和这个月的数据
+        const monthsToTry = [
+            `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}01`,
+            `${lastMonth.getFullYear()}${String(lastMonth.getMonth() + 1).padStart(2, '0')}01`
+        ];
+        
         let allHistory = [];
         
-        // 尝试获取最近几个月的数据（最多尝试10个日期，往前推）
-        for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
-            const targetDate = new Date(today);
-            targetDate.setMonth(targetDate.getMonth() - monthOffset);
-            
-            // 尝试该月的最后几个交易日
-            for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
-                const tryDate = new Date(targetDate);
-                tryDate.setDate(tryDate.getDate() - dayOffset);
+        for (const monthDate of monthsToTry) {
+            try {
+                const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${monthDate}&stockNo=${stockCodePadded}`;
                 
-                // 跳过周末
-                if (tryDate.getDay() === 0 || tryDate.getDay() === 6) continue;
+                const response = await httpRequest(twseUrl, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
                 
-                const dateStr = `${tryDate.getFullYear()}${String(tryDate.getMonth() + 1).padStart(2, '0')}${String(tryDate.getDate()).padStart(2, '0')}`;
-                
-                try {
-                    const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dateStr}&stockNo=${stockCodePadded}`;
-                    
-                    const response = await httpRequest(twseUrl, {
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
-                            // 解析 TWSE 返回的数据格式
-                            // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
-                            const monthHistory = data.data.map(item => ({
-                                date: item[0],
-                                volume: parseInt(String(item[1]).replace(/,/g, '')) || 0,
-                                amount: parseFloat(String(item[2]).replace(/,/g, '')) || 0,
-                                open: parseFloat(String(item[3]).replace(/,/g, '')) || 0,
-                                high: parseFloat(String(item[4]).replace(/,/g, '')) || 0,
-                                low: parseFloat(String(item[5]).replace(/,/g, '')) || 0,
-                                close: parseFloat(String(item[6]).replace(/,/g, '')) || 0,
-                                change: parseFloat(String(item[7]).replace(/,/g, '')) || 0,
-                                transactions: parseInt(String(item[8]).replace(/,/g, '')) || 0
-                            }));
-                            
-                            // 合并数据，避免重复
-                            for (const item of monthHistory) {
-                                if (!allHistory.find(h => h.date === item.date)) {
-                                    allHistory.push(item);
-                                }
-                            }
-                            
-                            // 如果已经获取足够的数据，就停止
-                            if (allHistory.length >= days) {
-                                break;
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                        // 解析 TWSE 返回的数据格式
+                        // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
+                        const monthHistory = data.data.map(item => ({
+                            date: item[0],
+                            volume: parseInt(String(item[1]).replace(/,/g, '')) || 0,
+                            amount: parseFloat(String(item[2]).replace(/,/g, '')) || 0,
+                            open: parseFloat(String(item[3]).replace(/,/g, '')) || 0,
+                            high: parseFloat(String(item[4]).replace(/,/g, '')) || 0,
+                            low: parseFloat(String(item[5]).replace(/,/g, '')) || 0,
+                            close: parseFloat(String(item[6]).replace(/,/g, '')) || 0,
+                            change: parseFloat(String(item[7]).replace(/,/g, '')) || 0,
+                            transactions: parseInt(String(item[8]).replace(/,/g, '')) || 0
+                        }));
+                        
+                        // 过滤掉交易量为0的数据（可能是休市日）
+                        const validHistory = monthHistory.filter(item => item.volume > 0 && item.close > 0);
+                        
+                        // 合并数据，避免重复
+                        for (const item of validHistory) {
+                            if (!allHistory.find(h => h.date === item.date)) {
+                                allHistory.push(item);
                             }
                         }
                     }
-                } catch (err) {
-                    // 继续尝试下一个日期
-                    continue;
                 }
-            }
-            
-            if (allHistory.length >= days) {
-                break;
+            } catch (err) {
+                console.error(`获取 ${monthDate} 的数据失败:`, err.message);
+                continue;
             }
         }
         
@@ -181,11 +169,11 @@ async function fetchStockHistory(ticker, days = 30) {
             return dateA[2] - dateB[2];
         });
         
-        // 只取最近 N 天
+        // 只取最近 N 个交易日
         allHistory = allHistory.slice(-days);
         
         if (allHistory.length > 0) {
-            console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${allHistory.length} 天`);
+            console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${allHistory.length} 个交易日`);
             return allHistory;
         }
     } catch (err) {
@@ -278,12 +266,21 @@ async function fetchStockData(ticker) {
                 // 解析价格数据（TWSE API 返回的可能是字符串，需要移除千分位逗号）
                 const closingPrice = parseFloat(String(stock.ClosingPrice || 0).replace(/,/g, '')) || 0;
                 const previousClose = parseFloat(String(stock.PreviousClosingPrice || stock.ClosingPrice || 0).replace(/,/g, '')) || closingPrice;
-                const changePercent = previousClose > 0 
-                    ? ((closingPrice - previousClose) / previousClose * 100)
-                    : 0;
                 
                 // 解析成交量（移除千分位逗号）
                 const volume = parseInt(String(stock.TradeVolume || 0).replace(/,/g, '')) || 0;
+                
+                // 检查是否是交易日：如果成交量为0或价格异常，可能是休市日
+                const isTradingDay = volume > 0 && closingPrice > 0;
+                
+                if (!isTradingDay) {
+                    console.log(`⚠️ 今日可能休市或数据异常: 成交量=${volume}, 价格=${closingPrice}`);
+                }
+                
+                const changePercent = previousClose > 0 && isTradingDay
+                    ? ((closingPrice - previousClose) / previousClose * 100)
+                    : 0;
+                
                 const highestPrice = parseFloat(String(stock.HighestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
                 const lowestPrice = parseFloat(String(stock.LowestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
                 
