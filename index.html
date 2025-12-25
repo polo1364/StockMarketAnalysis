@@ -228,7 +228,13 @@
                 </div>
             </div>
 
-            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in">
+            <!-- 多風格分析結果 -->
+            <div id="multi-style-analysis" class="space-y-4 hidden">
+                <!-- 動態插入4種風格的分析結果 -->
+            </div>
+
+            <!-- 單風格分析結果（保留以備用） -->
+            <div id="single-style-analysis" class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in hidden">
                 <div class="p-6 border-b border-slate-700 bg-slate-800/50">
                     <h3 class="text-blue-400 font-bold mb-2 flex items-center gap-2">
                         <i class="fa-regular fa-lightbulb"></i> 市場總結
@@ -574,6 +580,29 @@
 
             // 渲染多風格分析結果
             const container = document.getElementById('multi-style-analysis');
+            if (!container) {
+                console.error('找不到 multi-style-analysis 容器，嘗試創建...');
+                // 如果容器不存在，創建它
+                const resultArea = document.getElementById('result-area');
+                if (resultArea) {
+                    const newContainer = document.createElement('div');
+                    newContainer.id = 'multi-style-analysis';
+                    newContainer.className = 'space-y-4';
+                    // 插入到技術線圖之後
+                    const chartsContainer = resultArea.querySelector('.bg-slate-800.rounded-2xl');
+                    if (chartsContainer && chartsContainer.nextSibling) {
+                        resultArea.insertBefore(newContainer, chartsContainer.nextSibling);
+                    } else {
+                        resultArea.appendChild(newContainer);
+                    }
+                    newContainer.innerHTML = '';
+                    return renderMultiStyleData(data, styles);
+                } else {
+                    console.error('找不到 result-area 容器');
+                    return;
+                }
+            }
+            
             container.innerHTML = '';
             
             // 檢查是否有分析結果
