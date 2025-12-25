@@ -241,7 +241,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="card-base p-5 rounded-xl">
                     <div class="flex items-center gap-3 mb-3">
                         <div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-yellow-500/30">
@@ -303,8 +303,9 @@
 
             <!-- 多風格分析結果（標籤頁切換） -->
             <div class="card-base rounded-2xl overflow-hidden">
-                <!-- 標籤按鈕 -->
-                <div class="flex border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-slate-800/50 overflow-x-auto">
+                <!-- 標籤按鈕和導出按鈕 -->
+                <div class="flex items-center justify-between border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-slate-800/50">
+                    <div class="flex flex-1 overflow-x-auto">
                     <button onclick="switchStyleTab(0)" id="style-tab-0" class="style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-blue-400 text-blue-400 bg-slate-800/30 min-w-[140px]">
                         <span class="text-lg mr-2">💎</span> 價值投資
                     </button>
@@ -316,6 +317,13 @@
                     </button>
                     <button onclick="switchStyleTab(3)" id="style-tab-3" class="style-tab-btn flex-1 px-5 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200 min-w-[140px]">
                         <span class="text-lg mr-2">🛡️</span> 保守存股
+                    </button>
+                    </div>
+                    <button onclick="exportToLineNotebook()" 
+                        class="mx-4 px-4 py-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white rounded-lg font-semibold text-sm transition-all shadow-lg shadow-green-600/20 flex items-center gap-2 whitespace-nowrap hover:scale-105"
+                        title="匯出為 LINE 筆記本格式">
+                        <i class="fa-solid fa-download"></i>
+                        <span class="hidden sm:inline">匯出筆記</span>
                     </button>
                 </div>
                 
@@ -563,9 +571,9 @@
                 if (!res.ok) {
                     const errorData = await res.json().catch(() => ({}));
                     
-                    if (res.status === 401) {
-                        alert("API Key 無效或過期，請重新設定。");
-                        showModal();
+                if (res.status === 401) {
+                    alert("API Key 無效或過期，請重新設定。");
+                    showModal();
                         return;
                     }
                     
@@ -609,7 +617,7 @@
                     renderMultiStyleData(data, styles);
                 } else if (data.summary || data.analysis) {
                     console.log('⚠️ 使用单风格渲染（向后兼容）');
-                    renderData(data);
+                renderData(data);
                 } else {
                     console.error('❌ 没有找到分析结果');
                     console.error('数据内容:', data);
@@ -728,6 +736,182 @@
             
             // 默认显示第一个风格
             switchStyleTab(0);
+            
+            // 保存完整数据供导出使用
+            window.currentMarketData = data.market_data;
+            window.currentHistory = data.history;
+        }
+        
+        // 匯出為 LINE 筆記本格式
+        function exportToLineNotebook() {
+            const marketData = window.currentMarketData;
+            const analyses = window.currentAnalyses || [];
+            const styles = window.currentStyles || [];
+            const history = window.currentHistory || [];
+            
+            if (!marketData || analyses.length === 0) {
+                alert('沒有可匯出的分析結果');
+                return;
+            }
+            
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            
+            let content = '';
+            content += '═'.repeat(50) + '\n';
+            content += `📊 ${marketData.name} (${document.getElementById('ticker-input').value.toUpperCase()}) 股票分析報告\n`;
+            content += `📅 分析時間：${dateStr}\n`;
+            content += '═'.repeat(50) + '\n\n';
+            
+            // 基本資訊
+            content += '【基本資訊】\n';
+            content += '─'.repeat(30) + '\n';
+            content += `股票代號：${document.getElementById('ticker-input').value.toUpperCase()}\n`;
+            content += `公司名稱：${marketData.name}\n`;
+            content += `當前價格：${marketData.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+            content += `漲跌幅：${marketData.change}\n`;
+            content += `本益比 (PE)：${marketData.pe}\n`;
+            if (marketData.dividendYield && marketData.dividendYield !== 'N/A') {
+                content += `股息率：${marketData.dividendYield}%\n`;
+            }
+            if (marketData.pb && marketData.pb !== 'N/A') {
+                content += `股價淨值比 (PB)：${marketData.pb}\n`;
+            }
+            content += `成交量：${marketData.volume > 0 ? (marketData.volume >= 1000000 ? `${(marketData.volume / 1000000).toFixed(2)}M` : marketData.volume >= 1000 ? `${(marketData.volume / 1000).toFixed(1)}K` : marketData.volume.toLocaleString()) : 'N/A'}\n`;
+            content += `前收盤價：${marketData.previousClose > 0 ? marketData.previousClose.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}\n`;
+            content += `今日最高：${marketData.dayHigh > 0 ? marketData.dayHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}\n`;
+            content += `今日最低：${marketData.dayLow > 0 ? marketData.dayLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}\n`;
+            if (marketData.fiftyTwoWeekHigh > 0) {
+                content += `52週最高：${marketData.fiftyTwoWeekHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+            }
+            if (marketData.fiftyTwoWeekLow > 0) {
+                content += `52週最低：${marketData.fiftyTwoWeekLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n`;
+            }
+            content += '\n';
+            
+            // 各風格分析
+            content += '【AI 專業分析】\n';
+            content += '═'.repeat(50) + '\n\n';
+            
+            analyses.forEach((analysis, index) => {
+                const style = styles[index];
+                if (!style || !analysis) return;
+                
+                const styleEmoji = {
+                    '價值投資': '💎',
+                    '短線當沖': '⚡',
+                    '成長型投資': '🚀',
+                    '保守存股': '🛡️'
+                };
+                
+                content += `${styleEmoji[style.value] || '📌'} ${style.label}\n`;
+                content += '─'.repeat(30) + '\n';
+                
+                if (analysis.action) {
+                    content += `操作建議：${analysis.action}\n`;
+                }
+                if (analysis.risk_level) {
+                    content += `風險等級：${analysis.risk_level}\n`;
+                }
+                if (analysis.target_price && analysis.target_price !== 'N/A') {
+                    content += `目標價位：${analysis.target_price}\n`;
+                }
+                if (analysis.stop_loss && analysis.stop_loss !== 'N/A') {
+                    content += `止損價位：${analysis.stop_loss}\n`;
+                }
+                if (analysis.time_horizon && analysis.time_horizon !== 'N/A') {
+                    content += `投資時程：${analysis.time_horizon}\n`;
+                }
+                if (analysis.position_sizing && analysis.position_sizing !== 'N/A') {
+                    content += `建議倉位：${analysis.position_sizing}\n`;
+                }
+                content += '\n';
+                
+                if (analysis.key_levels) {
+                    if (analysis.key_levels.support || analysis.key_levels.resistance || analysis.key_levels.breakout) {
+                        content += '關鍵價位：\n';
+                        if (analysis.key_levels.support) {
+                            content += `  支撐位：${analysis.key_levels.support}\n`;
+                        }
+                        if (analysis.key_levels.resistance) {
+                            content += `  阻力位：${analysis.key_levels.resistance}\n`;
+                        }
+                        if (analysis.key_levels.breakout) {
+                            content += `  突破位：${analysis.key_levels.breakout}\n`;
+                        }
+                        content += '\n';
+                    }
+                }
+                
+                if (analysis.summary) {
+                    content += '市場總結：\n';
+                    content += `${analysis.summary}\n\n`;
+                }
+                
+                if (analysis.bullish_points && analysis.bullish_points.length > 0) {
+                    content += '✅ 看多訊號：\n';
+                    analysis.bullish_points.forEach((point, i) => {
+                        content += `  ${i + 1}. ${point}\n`;
+                    });
+                    content += '\n';
+                }
+                
+                if (analysis.bearish_points && analysis.bearish_points.length > 0) {
+                    content += '⚠️ 風險警示：\n';
+                    analysis.bearish_points.forEach((point, i) => {
+                        content += `  ${i + 1}. ${point}\n`;
+                    });
+                    content += '\n';
+                }
+                
+                if (analysis.industry_comparison && analysis.industry_comparison !== 'N/A') {
+                    content += '行業對比分析：\n';
+                    content += `${analysis.industry_comparison}\n\n`;
+                }
+                
+                if (analysis.catalyst && analysis.catalyst !== 'N/A') {
+                    content += '潛在催化劑：\n';
+                    content += `${analysis.catalyst}\n\n`;
+                }
+                
+                if (analysis.analysis) {
+                    content += '詳細分析：\n';
+                    content += `${analysis.analysis}\n\n`;
+                }
+                
+                content += '─'.repeat(50) + '\n\n';
+            });
+            
+            // 免責聲明
+            content += '【免責聲明】\n';
+            content += '─'.repeat(30) + '\n';
+            content += '本分析報告由 AI 自動生成，僅供參考，不代表任何投資建議。\n';
+            content += '投資有風險，請謹慎評估並自行承擔投資責任。\n';
+            content += '資料來源：TWSE 台灣證券交易所、Google Gemini AI\n';
+            content += `生成時間：${dateStr}\n`;
+            
+            // 下載檔案
+            const blob = new Blob(['\ufeff' + content], { type: 'text/plain;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${marketData.name}_${document.getElementById('ticker-input').value.toUpperCase()}_分析報告_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            // 顯示成功訊息
+            const btn = event.target.closest('button');
+            if (btn) {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> <span class="hidden sm:inline">已匯出</span>';
+                btn.classList.add('bg-green-500');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('bg-green-500');
+                }, 2000);
+            }
         }
         
         // 切換風格標籤
