@@ -96,20 +96,82 @@ async function httpRequest(url, options = {}) {
 // 获取股票数据的函数（使用多种数据源）
 async function fetchStockData(ticker) {
     // 处理台股代号（支持4位和5位数字）
+    const stockCode = ticker.replace(/^0+/, ''); // 移除前导零，TWSE API 不需要前导零
+    const stockCodePadded = stockCode.padStart(4, '0'); // 补齐到4位
+    
+    // 方案 1: 使用台湾证券交易所 OpenAPI（官方 API，最可靠）
+    try {
+        console.log(`尝试 TWSE OpenAPI: ${stockCodePadded}`);
+        
+        // TWSE 即時報價 API
+        const twseUrl = `https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL`;
+        
+        const twseResponse = await httpRequest(twseUrl, {
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (twseResponse.ok) {
+            const twseData = await twseResponse.json();
+            console.log(`TWSE API 返回数据，共 ${Array.isArray(twseData) ? twseData.length : 0} 只股票`);
+            
+            // 查找匹配的股票（支持多种格式：4位数字、带前导零等）
+            const stock = Array.isArray(twseData) ? twseData.find(s => {
+                const code = String(s.Code || '').trim();
+                return code === stockCodePadded || 
+                       code === stockCode || 
+                       code === ticker.padStart(4, '0');
+            }) : null;
+            
+            if (stock) {
+                console.log(`✅ TWSE API 成功: ${stock.Code} (${stock.Name}), 价格: ${stock.ClosingPrice}`);
+                
+                // 解析价格数据（TWSE API 返回的可能是字符串，需要移除千分位逗号）
+                const closingPrice = parseFloat(String(stock.ClosingPrice || 0).replace(/,/g, '')) || 0;
+                const previousClose = parseFloat(String(stock.PreviousClosingPrice || stock.ClosingPrice || 0).replace(/,/g, '')) || closingPrice;
+                const changePercent = previousClose > 0 
+                    ? ((closingPrice - previousClose) / previousClose * 100)
+                    : 0;
+                
+                // 解析成交量（移除千分位逗号）
+                const volume = parseInt(String(stock.TradeVolume || 0).replace(/,/g, '')) || 0;
+                const highestPrice = parseFloat(String(stock.HighestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
+                const lowestPrice = parseFloat(String(stock.LowestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
+                
+                return {
+                    longName: stock.Name || ticker,
+                    shortName: stock.Code || ticker,
+                    regularMarketPrice: closingPrice,
+                    regularMarketChangePercent: changePercent,
+                    trailingPE: null,
+                    marketCap: null,
+                    regularMarketVolume: volume,
+                    regularMarketPreviousClose: previousClose,
+                    regularMarketDayHigh: highestPrice,
+                    regularMarketDayLow: lowestPrice,
+                    fiftyTwoWeekHigh: null,
+                    fiftyTwoWeekLow: null
+                };
+            } else {
+                console.log(`TWSE API 未找到股票代码: ${stockCodePadded} (尝试了: ${stockCodePadded}, ${stockCode}, ${ticker.padStart(4, '0')})`);
+            }
+        } else {
+            console.log(`TWSE API 返回状态码: ${twseResponse.status}`);
+        }
+    } catch (err) {
+        console.error(`TWSE API 失败:`, err.message);
+    }
+    
+    // 方案 2: 使用 CORS 代理服务（Yahoo Finance 备用方案）
     let symbolsToTry = [ticker.toUpperCase()];
     
     // 如果是纯数字，尝试添加台股后缀（优先尝试 .TW）
     if (/^\d{4,5}$/.test(ticker)) {
-        // 4位或5位数字，优先尝试 .TW（更常见）
         symbolsToTry.push(ticker + '.TW');
         symbolsToTry.push(ticker + '.TWO');
     }
     
-    // 方案 1: 尝试 yahoo-finance2 库（快速跳过，因为 Railway 上会失败）
-    // 跳过，因为 Railway 上总是失败
-    
-    // 方案 2: 使用 CORS 代理服务（Railway 网络受限时的首选方案）
-    // 只尝试最可能的符号，避免浪费时间
     const primarySymbol = symbolsToTry[1] || symbolsToTry[0]; // 优先尝试 .TW
     
     try {
