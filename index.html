@@ -436,6 +436,14 @@
                 return;
             }
 
+            // 使用所有4種投資風格
+            const styles = [
+                { value: '價值投資', label: '💎 價值投資 (巴菲特)', color: 'blue' },
+                { value: '短線當沖', label: '⚡ 短線當沖 (技術面)', color: 'yellow' },
+                { value: '成長型投資', label: '🚀 成長型投資 (科技股)', color: 'purple' },
+                { value: '保守存股', label: '🛡️ 保守存股 (領股息)', color: 'green' }
+            ];
+
             // UI 狀態切換
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('result-area').classList.add('hidden');
