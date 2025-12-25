@@ -364,22 +364,40 @@
         let volumeChart = null;
         
         function renderCharts(history) {
+            console.log('开始渲染图表，历史数据:', history);
+            
+            if (!history || history.length === 0) {
+                console.error('历史数据为空，无法渲染图表');
+                return;
+            }
+            
             // 准备数据
             const labels = history.map(h => {
-                // 转换日期格式：113/12/22 -> 2024/12/22
-                const dateParts = h.date.split('/');
-                if (dateParts.length === 3) {
-                    const year = parseInt(dateParts[0]) + 1911; // 民国年转西元年
-                    return `${year}/${dateParts[1]}/${dateParts[2]}`;
+                try {
+                    // 转换日期格式：113/12/22 -> 2024/12/22
+                    const dateParts = h.date.split('/');
+                    if (dateParts.length === 3) {
+                        const year = parseInt(dateParts[0]) + 1911; // 民国年转西元年
+                        return `${year}/${dateParts[1]}/${dateParts[2]}`;
+                    }
+                    return h.date;
+                } catch (e) {
+                    console.error('日期转换失败:', h.date, e);
+                    return h.date;
                 }
-                return h.date;
             });
             
-            const closePrices = history.map(h => h.close);
-            const openPrices = history.map(h => h.open);
-            const highPrices = history.map(h => h.high);
-            const lowPrices = history.map(h => h.low);
-            const volumes = history.map(h => h.volume);
+            const closePrices = history.map(h => parseFloat(h.close) || 0);
+            const openPrices = history.map(h => parseFloat(h.open) || 0);
+            const highPrices = history.map(h => parseFloat(h.high) || 0);
+            const lowPrices = history.map(h => parseFloat(h.low) || 0);
+            const volumes = history.map(h => parseInt(h.volume) || 0);
+            
+            console.log('图表数据准备完成:', {
+                labels: labels.length,
+                closePrices: closePrices.length,
+                volumes: volumes.length
+            });
             
             // 销毁旧图表（如果存在）
             if (priceChart) {

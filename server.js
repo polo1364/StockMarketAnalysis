@@ -100,21 +100,18 @@ async function fetchStockHistory(ticker, days = 30) {
     
     try {
         // 使用 TWSE API 获取历史数据
-        // 获取最近一个月的完整数据（TWSE API 按月份返回）
+        // 尝试获取最近3个月的数据
         const today = new Date();
-        const lastMonth = new Date(today);
-        lastMonth.setMonth(lastMonth.getMonth() - 1);
-        
-        // 尝试获取上个月和这个月的数据
-        const monthsToTry = [
-            `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}01`,
-            `${lastMonth.getFullYear()}${String(lastMonth.getMonth() + 1).padStart(2, '0')}01`
-        ];
-        
         let allHistory = [];
         
-        for (const monthDate of monthsToTry) {
+        // 尝试获取最近3个月的数据
+        for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
+            const targetDate = new Date(today);
+            targetDate.setMonth(targetDate.getMonth() - monthOffset);
+            const monthDate = `${targetDate.getFullYear()}${String(targetDate.getMonth() + 1).padStart(2, '0')}01`;
+            
             try {
+                console.log(`尝试获取历史数据: ${stockCodePadded}, 月份: ${monthDate}`);
                 const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${monthDate}&stockNo=${stockCodePadded}`;
                 
                 const response = await httpRequest(twseUrl, {
@@ -125,23 +122,35 @@ async function fetchStockHistory(ticker, days = 30) {
                 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log(`历史数据 API 响应: ${monthDate}, 状态: ${data.stat || 'unknown'}`);
+                    
                     if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                        console.log(`获取到 ${data.data.length} 条历史数据记录`);
+                        
                         // 解析 TWSE 返回的数据格式
                         // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
-                        const monthHistory = data.data.map(item => ({
-                            date: item[0],
-                            volume: parseInt(String(item[1]).replace(/,/g, '')) || 0,
-                            amount: parseFloat(String(item[2]).replace(/,/g, '')) || 0,
-                            open: parseFloat(String(item[3]).replace(/,/g, '')) || 0,
-                            high: parseFloat(String(item[4]).replace(/,/g, '')) || 0,
-                            low: parseFloat(String(item[5]).replace(/,/g, '')) || 0,
-                            close: parseFloat(String(item[6]).replace(/,/g, '')) || 0,
-                            change: parseFloat(String(item[7]).replace(/,/g, '')) || 0,
-                            transactions: parseInt(String(item[8]).replace(/,/g, '')) || 0
-                        }));
+                        const monthHistory = data.data.map(item => {
+                            try {
+                                return {
+                                    date: item[0],
+                                    volume: parseInt(String(item[1] || '0').replace(/,/g, '')) || 0,
+                                    amount: parseFloat(String(item[2] || '0').replace(/,/g, '')) || 0,
+                                    open: parseFloat(String(item[3] || '0').replace(/,/g, '')) || 0,
+                                    high: parseFloat(String(item[4] || '0').replace(/,/g, '')) || 0,
+                                    low: parseFloat(String(item[5] || '0').replace(/,/g, '')) || 0,
+                                    close: parseFloat(String(item[6] || '0').replace(/,/g, '')) || 0,
+                                    change: parseFloat(String(item[7] || '0').replace(/,/g, '')) || 0,
+                                    transactions: parseInt(String(item[8] || '0').replace(/,/g, '')) || 0
+                                };
+                            } catch (e) {
+                                console.error(`解析历史数据项失败:`, item, e);
+                                return null;
+                            }
+                        }).filter(item => item !== null);
                         
                         // 过滤掉交易量为0的数据（可能是休市日）
                         const validHistory = monthHistory.filter(item => item.volume > 0 && item.close > 0);
+                        console.log(`有效历史数据: ${validHistory.length} 条（过滤后）`);
                         
                         // 合并数据，避免重复
                         for (const item of validHistory) {
@@ -149,7 +158,17 @@ async function fetchStockHistory(ticker, days = 30) {
                                 allHistory.push(item);
                             }
                         }
+                        
+                        // 如果已经获取足够的数据，就停止
+                        if (allHistory.length >= days) {
+                            console.log(`已获取足够的历史数据: ${allHistory.length} 条`);
+                            break;
+                        }
+                    } else {
+                        console.log(`月份 ${monthDate} 没有数据或数据格式错误`);
                     }
+                } else {
+                    console.log(`历史数据 API 返回状态码: ${response.status}`);
                 }
             } catch (err) {
                 console.error(`获取 ${monthDate} 的数据失败:`, err.message);
@@ -159,14 +178,18 @@ async function fetchStockHistory(ticker, days = 30) {
         
         // 按日期排序（从旧到新）
         allHistory.sort((a, b) => {
-            const dateA = a.date.split('/').map(Number);
-            const dateB = b.date.split('/').map(Number);
-            // 民国年转西元年比较
-            const yearA = dateA[0] + 1911;
-            const yearB = dateB[0] + 1911;
-            if (yearA !== yearB) return yearA - yearB;
-            if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
-            return dateA[2] - dateB[2];
+            try {
+                const dateA = a.date.split('/').map(Number);
+                const dateB = b.date.split('/').map(Number);
+                // 民国年转西元年比较
+                const yearA = dateA[0] + 1911;
+                const yearB = dateB[0] + 1911;
+                if (yearA !== yearB) return yearA - yearB;
+                if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
+                return dateA[2] - dateB[2];
+            } catch (e) {
+                return 0;
+            }
         });
         
         // 只取最近 N 个交易日
@@ -175,13 +198,15 @@ async function fetchStockHistory(ticker, days = 30) {
         if (allHistory.length > 0) {
             console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${allHistory.length} 个交易日`);
             return allHistory;
+        } else {
+            console.log(`⚠️ 无法获取历史数据: ${stockCodePadded}, 所有尝试都失败`);
         }
     } catch (err) {
         console.error(`获取历史数据失败:`, err.message);
+        console.error(`错误堆栈:`, err.stack);
     }
     
     // 如果失败，返回空数组
-    console.log(`⚠️ 无法获取历史数据: ${stockCodePadded}`);
     return [];
 }
 
