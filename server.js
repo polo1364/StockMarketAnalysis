@@ -751,7 +751,7 @@ app.post('/api/analyze', async (req, res) => {
     console.log('请求体:', JSON.stringify(req.body));
     console.log('请求头 x-api-key:', req.headers['x-api-key'] ? '存在' : '不存在');
     
-    const { ticker, style } = req.body;
+    const { ticker, style, styles } = req.body;
     const apiKey = req.headers['x-api-key'];
     
     // 设置超时（在验证之后）
@@ -788,6 +788,17 @@ app.post('/api/analyze', async (req, res) => {
 
     if (!ticker) {
         return res.status(400).json({ error: '缺少股票代號' });
+    }
+    
+    // 确定要使用的分析风格
+    let analysisStyles;
+    if (styles && Array.isArray(styles) && styles.length > 0) {
+        analysisStyles = styles;
+    } else if (style) {
+        analysisStyles = [style];
+    } else {
+        // 默认使用所有4种风格
+        analysisStyles = ['價值投資', '短線當沖', '成長型投資', '保守存股'];
     }
 
     try {
