@@ -828,25 +828,30 @@ app.post('/api/analyze', async (req, res) => {
             console.log('注意：使用演示數據');
         }
 
-        // --- 2. 使用 Gemini AI 进行分析 ---
-        console.log(`正在使用 Gemini AI 分析股票...`);
+        // --- 2. 使用 Gemini AI 进行多风格分析 ---
+        console.log(`正在使用 Gemini AI 分析股票，風格數量: ${analysisStyles.length}`);
         const genAI = new GoogleGenerativeAI(apiKey);
         
         // 使用 gemini-2.5-flash 模型（最新版本，更快更强）
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
+        
         // 获取当前日期和时间
         const now = new Date();
         const currentDate = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         
-        // 构建提示词（明确要求使用中文和最新数据）
-        const prompt = `
+        // 并行分析所有风格
+        const analysisPromises = analysisStyles.map(async (currentStyle) => {
+            try {
+                console.log(`正在分析風格: ${currentStyle}`);
+                
+                // 构建提示词（明确要求使用中文和最新数据）
+                const prompt = `
 你是一位專業的股票分析師，請使用繁體中文進行分析（專業術語如 PE、ROE、EPS 等可保留英文縮寫）。
 
 **重要提醒：當前日期為 ${currentDate} ${currentTime}，請使用最新的市場數據和資訊進行分析。請基於最新的價格、成交量、技術指標等進行綜合判斷。**
 
-請根據以下**最新**股票數據，以「${style}」的投資風格進行分析：
+請根據以下**最新**股票數據，以「${currentStyle}」的投資風格進行分析：
 
 股票代號: ${ticker}
 公司名稱: ${marketData.name}
@@ -878,6 +883,7 @@ app.post('/api/analyze', async (req, res) => {
 4. 請確保回覆是有效的 JSON 格式，不要包含任何額外的文字或 markdown 格式
 5. **請基於當前日期 ${currentDate} 的最新市場數據進行分析，考慮最新的價格走勢、成交量變化等技術指標**
 6. **分析時請考慮最新的市場動態、行業趨勢和公司基本面變化**
+7. **請特別強調「${currentStyle}」投資風格的觀點和建議**
 `;
 
         // 设置 Gemini API 超时
@@ -896,27 +902,48 @@ app.post('/api/analyze', async (req, res) => {
         // 清理 AI 回應（移除可能的 markdown 代碼塊）
         aiText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         
-        let aiAnalysis;
-        try {
-            aiAnalysis = JSON.parse(aiText);
-        } catch (parseError) {
-            console.error('AI 回應解析失敗:', aiText);
-            // 如果解析失敗，使用預設值
-            aiAnalysis = {
-                summary: "AI 分析暫時無法取得，請稍後再試。",
-                analysis: aiText || "無法解析 AI 回應。",
-                action: "HOLD",
-                risk_level: "Medium",
-                bullish_points: [],
-                bearish_points: []
-            };
-        }
+                let aiAnalysis;
+                try {
+                    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        aiAnalysis = JSON.parse(jsonMatch[0]);
+                    } else {
+                        throw new Error('無法找到 JSON');
+                    }
+                } catch (parseError) {
+                    console.error(`解析 ${currentStyle} 風格分析失敗:`, parseError);
+                    aiAnalysis = {
+                        summary: "AI 分析暫時無法取得，請稍後再試。",
+                        analysis: aiText || "無法解析 AI 回應。",
+                        action: "HOLD",
+                        risk_level: "中",
+                        bullish_points: [],
+                        bearish_points: []
+                    };
+                }
+                
+                return aiAnalysis;
+            } catch (err) {
+                console.error(`分析風格 ${currentStyle} 失敗:`, err.message);
+                return {
+                    summary: "分析失敗，請稍後再試。",
+                    analysis: "無法獲取分析結果。",
+                    action: "HOLD",
+                    risk_level: "中",
+                    bullish_points: [],
+                    bearish_points: []
+                };
+            }
+        });
 
         // --- 3. 获取历史数据（用于图表） ---
         console.log(`正在获取历史数据: ${ticker}`);
         const history = await fetchStockHistory(ticker, 30);
         
-        // --- 4. 返回結果 ---
+        // --- 4. 等待所有分析完成 ---
+        const analyses = await Promise.all(analysisPromises);
+        
+        // --- 5. 返回結果 ---
         clearTimeoutSafe();
         
         if (res.headersSent) {
@@ -924,16 +951,30 @@ app.post('/api/analyze', async (req, res) => {
             return;
         }
         
-        res.json({
-            market_data: marketData,
-            history: history, // 添加历史数据
-            summary: aiAnalysis.summary || "分析完成",
-            analysis: aiAnalysis.analysis || "",
-            action: aiAnalysis.action || "HOLD",
-            risk_level: aiAnalysis.risk_level || "Medium",
-            bullish_points: aiAnalysis.bullish_points || [],
-            bearish_points: aiAnalysis.bearish_points || []
-        });
+        // 如果只有一个风格，保持向后兼容
+        if (analysisStyles.length === 1) {
+            const singleAnalysis = analyses[0] || {};
+            res.json({
+                market_data: marketData,
+                summary: singleAnalysis.summary,
+                analysis: singleAnalysis.analysis,
+                action: singleAnalysis.action,
+                risk_level: singleAnalysis.risk_level,
+                bullish_points: singleAnalysis.bullish_points,
+                bearish_points: singleAnalysis.bearish_points,
+                history: history
+            });
+        } else {
+            // 多个风格，返回所有分析结果
+            res.json({
+                market_data: marketData,
+                analyses: analyses.map((analysis, index) => ({
+                    style: analysisStyles[index],
+                    ...analysis
+                })),
+                history: history
+            });
+        }
 
     } catch (error) {
         clearTimeoutSafe();

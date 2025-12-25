@@ -62,16 +62,35 @@
                     onkeypress="if(event.key==='Enter') analyzeStock()">
             </div>
             
-            <select id="style-select" class="bg-slate-900/50 text-white px-6 py-4 rounded-xl border-none outline-none focus:bg-slate-900 cursor-pointer hover:bg-slate-900 transition">
-                <option value="價值投資">💎 價值投資 (巴菲特)</option>
-                <option value="短線當沖">⚡ 短線當沖 (技術面)</option>
-                <option value="成長型投資">🚀 成長型投資 (科技股)</option>
-                <option value="保守存股">🛡️ 保守存股 (領股息)</option>
-            </select>
+            <div class="bg-slate-900/50 text-white px-6 py-4 rounded-xl border-none outline-none flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-blue-400"></i>
+                <span class="text-sm font-medium">全風格分析</span>
+            </div>
+            
+            <button onclick="saveCurrentStock()" id="save-btn" class="bg-green-600 hover:bg-green-500 text-white px-4 py-4 rounded-xl font-bold transition shadow-lg shadow-green-600/20 whitespace-nowrap flex items-center justify-center gap-2" title="儲存當前股票">
+                <i class="fa-solid fa-bookmark"></i>
+            </button>
             
             <button onclick="analyzeStock()" id="analyze-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-bold transition shadow-lg shadow-blue-600/20 whitespace-nowrap flex items-center justify-center gap-2">
                 <span>AI 分析</span> <i class="fa-solid fa-wand-magic-sparkles"></i>
             </button>
+        </div>
+
+        <!-- 已保存的股票列表 -->
+        <div id="saved-stocks-container" class="bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-slate-700 p-4 shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-bold text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-star text-yellow-400"></i>
+                    已保存的股票
+                </h3>
+                <button onclick="clearAllSavedStocks()" class="text-xs text-slate-500 hover:text-red-400 transition">
+                    <i class="fa-solid fa-trash"></i> 清除全部
+                </button>
+            </div>
+            <div id="saved-stocks-list" class="flex flex-wrap gap-2">
+                <!-- 已保存的股票會動態插入這裡 -->
+            </div>
+            <p id="no-saved-stocks" class="text-xs text-slate-500 text-center py-2 hidden">尚未保存任何股票</p>
         </div>
 
         <div id="loading" class="hidden py-20 text-center">
@@ -270,7 +289,145 @@
             }
         }
 
-        // --- 2. 核心功能：分析股票 ---
+        // --- 2. 保存股票功能 ---
+        // 从 localStorage 加载已保存的股票
+        function loadSavedStocks() {
+            const saved = JSON.parse(localStorage.getItem('savedStocks') || '[]');
+            const listContainer = document.getElementById('saved-stocks-list');
+            const noSavedMsg = document.getElementById('no-saved-stocks');
+            
+            listContainer.innerHTML = '';
+            
+            if (saved.length === 0) {
+                noSavedMsg.classList.remove('hidden');
+                return;
+            }
+            
+            noSavedMsg.classList.add('hidden');
+            
+            saved.forEach((stock, index) => {
+                const stockItem = document.createElement('div');
+                stockItem.className = 'group bg-slate-700/50 hover:bg-slate-700 px-4 py-2 rounded-lg border border-slate-600 hover:border-blue-500/50 transition-all cursor-pointer flex items-center gap-2';
+                stockItem.innerHTML = `
+                    <span class="text-sm font-medium text-white" onclick="selectSavedStock('${stock.ticker}')">${stock.ticker}(${stock.name})</span>
+                    <button onclick="removeSavedStock(${index})" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition ml-1">
+                        <i class="fa-solid fa-times text-xs"></i>
+                    </button>
+                `;
+                listContainer.appendChild(stockItem);
+            });
+        }
+        
+        // 保存当前股票
+        async function saveCurrentStock() {
+            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            
+            if (!ticker) {
+                alert("請先輸入股票代號！");
+                return;
+            }
+            
+            // 获取股票名称（从当前显示的结果或通过API）
+            let stockName = ticker;
+            const resultArea = document.getElementById('result-area');
+            if (!resultArea.classList.contains('hidden')) {
+                const nameEl = document.getElementById('stock-name');
+                if (nameEl && nameEl.innerText !== '--') {
+                    stockName = nameEl.innerText;
+                }
+            }
+            
+            // 如果结果区域没有显示，尝试快速获取股票名称
+            if (stockName === ticker) {
+                try {
+                    // 快速获取股票名称（不进行完整分析）
+                    const res = await fetch('/api/analyze', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey 
+                        },
+                        body: JSON.stringify({ ticker, style: '價值投資' })
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.market_data && data.market_data.name) {
+                            stockName = data.market_data.name;
+                        }
+                    }
+                } catch (err) {
+                    console.error('获取股票名称失败:', err);
+                }
+            }
+            
+            // 保存到 localStorage
+            const saved = JSON.parse(localStorage.getItem('savedStocks') || '[]');
+            
+            // 检查是否已存在
+            const exists = saved.find(s => s.ticker === ticker);
+            if (exists) {
+                alert(`${ticker}(${stockName}) 已經在保存列表中！`);
+                return;
+            }
+            
+            saved.push({ ticker, name: stockName, savedAt: new Date().toISOString() });
+            localStorage.setItem('savedStocks', JSON.stringify(saved));
+            
+            // 更新UI
+            loadSavedStocks();
+            
+            // 显示成功提示
+            const saveBtn = document.getElementById('save-btn');
+            const originalHTML = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fa-solid fa-check text-white"></i>';
+            saveBtn.classList.add('bg-green-500');
+            setTimeout(() => {
+                saveBtn.innerHTML = originalHTML;
+                saveBtn.classList.remove('bg-green-500');
+            }, 1000);
+        }
+        
+        // 选择已保存的股票
+        function selectSavedStock(ticker) {
+            document.getElementById('ticker-input').value = ticker;
+            analyzeStock();
+        }
+        
+        // 删除已保存的股票
+        function removeSavedStock(index) {
+            event.stopPropagation(); // 防止触发父元素的点击事件
+            const saved = JSON.parse(localStorage.getItem('savedStocks') || '[]');
+            saved.splice(index, 1);
+            localStorage.setItem('savedStocks', JSON.stringify(saved));
+            loadSavedStocks();
+        }
+        
+        // 清除所有已保存的股票
+        function clearAllSavedStocks() {
+            if (confirm('確定要清除所有已保存的股票嗎？')) {
+                localStorage.removeItem('savedStocks');
+                loadSavedStocks();
+            }
+        }
+        
+        // 更新已保存股票的名称（如果股票已保存）
+        function updateSavedStockName(name) {
+            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            const saved = JSON.parse(localStorage.getItem('savedStocks') || '[]');
+            const stockIndex = saved.findIndex(s => s.ticker === ticker);
+            
+            if (stockIndex !== -1 && saved[stockIndex].name !== name) {
+                saved[stockIndex].name = name;
+                localStorage.setItem('savedStocks', JSON.stringify(saved));
+                loadSavedStocks();
+            }
+        }
+        
+        // 页面加载时加载已保存的股票
+        loadSavedStocks();
+        
+        // --- 3. 核心功能：分析股票 ---
         async function analyzeStock() {
             const ticker = document.getElementById('ticker-input').value.trim();
             const style = document.getElementById('style-select').value;
@@ -287,14 +444,14 @@
             document.getElementById('analyze-btn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 分析中...';
 
             try {
-                // 發送請求到後端 (server.js)
+                // 發送請求到後端，使用所有風格
                 const res = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
                         'x-api-key': apiKey 
                     },
-                    body: JSON.stringify({ ticker, style })
+                    body: JSON.stringify({ ticker, styles: styles.map(s => s.value) })
                 });
 
                 // 處理錯誤狀態碼
@@ -337,7 +494,12 @@
                     return;
                 }
 
-                renderData(data);
+                // 检查是否有多个风格的分析结果
+                if (data.analyses && Array.isArray(data.analyses)) {
+                    renderMultiStyleData(data, styles);
+                } else {
+                    renderData(data);
+                }
 
             } catch (error) {
                 console.error(error);
@@ -357,6 +519,9 @@
 
             // --- A. 填寫市場數據 ---
             document.getElementById('stock-name').innerText = m.name;
+            
+            // 更新已保存的股票列表（如果当前股票已保存，更新名称）
+            updateSavedStockName(m.name);
             // 處理小數點顯示
             document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
             document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
