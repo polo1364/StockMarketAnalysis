@@ -228,9 +228,28 @@
                 </div>
             </div>
 
-            <!-- 多風格分析結果 -->
-            <div id="multi-style-analysis" class="space-y-4">
-                <!-- 動態插入4種風格的分析結果 -->
+            <!-- 多風格分析結果（標籤頁切換） -->
+            <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+                <!-- 標籤按鈕 -->
+                <div class="flex border-b border-slate-700 bg-slate-800/50 overflow-x-auto">
+                    <button onclick="switchStyleTab(0)" id="style-tab-0" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-blue-400 text-blue-400 bg-slate-800/50">
+                        💎 價值投資
+                    </button>
+                    <button onclick="switchStyleTab(1)" id="style-tab-1" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                        ⚡ 短線當沖
+                    </button>
+                    <button onclick="switchStyleTab(2)" id="style-tab-2" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                        🚀 成長型投資
+                    </button>
+                    <button onclick="switchStyleTab(3)" id="style-tab-3" class="style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                        🛡️ 保守存股
+                    </button>
+                </div>
+                
+                <!-- 分析結果內容區域 -->
+                <div id="multi-style-analysis" class="p-6">
+                    <!-- 動態插入當前選中風格的分析結果 -->
+                </div>
             </div>
 
             <!-- 單風格分析結果（保留以備用） -->
@@ -620,97 +639,127 @@
             
             // 确保容器可见
             container.classList.remove('hidden');
-            container.innerHTML = '';
             
             // 檢查是否有分析結果
             const analyses = data.analyses || [];
             console.log('准备渲染多风格分析，analyses:', analyses, 'styles:', styles);
             
+            // 保存分析结果到全局变量，供标签切换使用
+            window.currentAnalyses = analyses;
+            window.currentStyles = styles;
+            
             if (analyses.length === 0) {
-                container.innerHTML = '<div class="bg-slate-800 rounded-2xl border border-slate-700 p-6 text-center"><p class="text-slate-400">分析結果尚未返回，請稍候...</p></div>';
+                container.innerHTML = '<div class="text-center py-8"><p class="text-slate-400">分析結果尚未返回，請稍候...</p></div>';
                 return;
             }
             
-            styles.forEach((style, index) => {
-                // 尝试多种方式匹配分析结果
-                let analysis = analyses[index] || 
-                              analyses.find(a => a.style === style.value) ||
-                              analyses.find(a => a.style && a.style.includes(style.value)) ||
-                              null;
-                              
-                console.log(`风格 ${style.value} (索引 ${index}) 的分析结果:`, analysis);
-                
-                const styleCard = document.createElement('div');
-                styleCard.className = 'bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in';
-                
-                const colorClasses = {
-                    blue: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
-                    yellow: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-                    purple: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
-                    green: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30' }
-                };
-                
-                const colors = colorClasses[style.color] || colorClasses.blue;
-                
-                if (analysis) {
-                    styleCard.innerHTML = `
-                        <div class="p-6 border-b border-slate-700 bg-slate-800/50">
-                            <h3 class="${colors.text} font-bold mb-2 flex items-center gap-2">
-                                <span class="text-2xl">${style.label.split(' ')[0]}</span>
-                                <span>${style.label}</span>
-                            </h3>
-                            <div class="flex items-center gap-3 mt-3">
-                                <span class="px-3 py-1 rounded-full text-xs font-bold ${colors.bg} ${colors.text} border ${colors.border}">
-                                    ${analysis.action || '--'}
-                                </span>
-                                <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300">
-                                    風險: ${analysis.risk_level || '--'}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="p-6">
-                            <p class="text-lg text-slate-200 leading-relaxed italic mb-4">${analysis.summary || '分析中...'}</p>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                <div>
-                                    <h4 class="text-green-400 font-bold mb-3 flex items-center gap-2 text-sm">
-                                        <i class="fa-solid fa-arrow-trend-up"></i> 看多訊號
-                                    </h4>
-                                    <ul class="space-y-2 text-sm text-slate-300">
-                                        ${(analysis.bullish_points || []).map(point => `<li class="flex items-start gap-2"><i class="fa-solid fa-check text-green-400 mt-1"></i><span>${point}</span></li>`).join('')}
-                                    </ul>
-                                </div>
-                                <div>
-                                    <h4 class="text-red-400 font-bold mb-3 flex items-center gap-2 text-sm">
-                                        <i class="fa-solid fa-triangle-exclamation"></i> 風險警示
-                                    </h4>
-                                    <ul class="space-y-2 text-sm text-slate-300">
-                                        ${(analysis.bearish_points || []).map(point => `<li class="flex items-start gap-2"><i class="fa-solid fa-exclamation text-red-400 mt-1"></i><span>${point}</span></li>`).join('')}
-                                    </ul>
-                                </div>
-                            </div>
-                            <div class="mt-4 p-4 bg-slate-900/30 rounded-lg border-t border-slate-700">
-                                <h4 class="text-slate-400 text-xs font-bold uppercase mb-2 tracking-wider">詳細分析</h4>
-                                <p class="text-slate-300 leading-6 text-sm text-justify">${analysis.analysis || '分析中...'}</p>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    styleCard.innerHTML = `
-                        <div class="p-6 border-b border-slate-700 bg-slate-800/50">
-                            <h3 class="${colors.text} font-bold mb-2 flex items-center gap-2">
-                                <span class="text-2xl">${style.label.split(' ')[0]}</span>
-                                <span>${style.label}</span>
-                            </h3>
-                        </div>
-                        <div class="p-6 text-center">
-                            <div class="inline-block w-8 h-8 border-2 border-slate-700 border-t-${style.color}-500 rounded-full animate-spin mb-2"></div>
-                            <p class="text-slate-400">分析中...</p>
-                        </div>
-                    `;
+            // 默认显示第一个风格
+            switchStyleTab(0);
+        }
+        
+        // 切換風格標籤
+        function switchStyleTab(index) {
+            const container = document.getElementById('multi-style-analysis');
+            if (!container) return;
+            
+            const analyses = window.currentAnalyses || [];
+            const styles = window.currentStyles || [];
+            
+            if (index < 0 || index >= styles.length) return;
+            
+            // 更新標籤按鈕樣式
+            const colorMap = {
+                blue: { active: 'border-blue-400 text-blue-400', inactive: 'text-slate-400 hover:text-slate-200' },
+                yellow: { active: 'border-yellow-400 text-yellow-400', inactive: 'text-slate-400 hover:text-slate-200' },
+                purple: { active: 'border-purple-400 text-purple-400', inactive: 'text-slate-400 hover:text-slate-200' },
+                green: { active: 'border-green-400 text-green-400', inactive: 'text-slate-400 hover:text-slate-200' }
+            };
+            
+            for (let i = 0; i < 4; i++) {
+                const tabBtn = document.getElementById(`style-tab-${i}`);
+                if (tabBtn) {
+                    if (i === index) {
+                        const style = styles[i];
+                        const colors = colorMap[style?.color] || colorMap.blue;
+                        tabBtn.className = `style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 ${colors.active} bg-slate-800/50`;
+                    } else {
+                        tabBtn.className = `style-tab-btn flex-1 px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-slate-400 hover:text-slate-200`;
+                    }
                 }
-                
-                container.appendChild(styleCard);
-            });
+            }
+            
+            // 獲取當前風格的分析結果
+            const style = styles[index];
+            let analysis = analyses[index] || 
+                          analyses.find(a => a.style === style.value) ||
+                          analyses.find(a => a.style && a.style.includes(style.value)) ||
+                          null;
+            
+            const colorClasses = {
+                blue: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
+                yellow: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+                purple: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
+                green: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30' }
+            };
+            
+            const colors = colorClasses[style.color] || colorClasses.blue;
+            
+            if (analysis) {
+                container.innerHTML = `
+                    <div class="animate-fade-in">
+                        <div class="mb-4 flex items-center gap-3">
+                            <span class="px-4 py-2 rounded-lg text-sm font-bold ${colors.bg} ${colors.text} border ${colors.border}">
+                                ${analysis.action || '--'}
+                            </span>
+                            <span class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-700 text-slate-300">
+                                風險: ${analysis.risk_level || '--'}
+                            </span>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h3 class="text-lg font-bold text-slate-200 mb-3">市場總結</h3>
+                            <p class="text-slate-200 leading-relaxed italic text-base">${analysis.summary || '分析中...'}</p>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-slate-900/50 rounded-xl p-5 border border-slate-700">
+                                <h4 class="text-green-400 font-bold mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-arrow-trend-up"></i> 看多訊號
+                                </h4>
+                                <ul class="space-y-3 text-sm text-slate-300">
+                                    ${(analysis.bullish_points || []).length > 0 
+                                        ? (analysis.bullish_points || []).map(point => `<li class="flex items-start gap-2"><i class="fa-solid fa-check text-green-400 mt-1 flex-shrink-0"></i><span>${point}</span></li>`).join('')
+                                        : '<li class="text-slate-500">暫無看多訊號</li>'
+                                    }
+                                </ul>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-xl p-5 border border-slate-700">
+                                <h4 class="text-red-400 font-bold mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> 風險警示
+                                </h4>
+                                <ul class="space-y-3 text-sm text-slate-300">
+                                    ${(analysis.bearish_points || []).length > 0
+                                        ? (analysis.bearish_points || []).map(point => `<li class="flex items-start gap-2"><i class="fa-solid fa-exclamation text-red-400 mt-1 flex-shrink-0"></i><span>${point}</span></li>`).join('')
+                                        : '<li class="text-slate-500">暫無風險警示</li>'
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-slate-900/30 rounded-xl p-5 border border-slate-700">
+                            <h4 class="text-slate-400 text-xs font-bold uppercase mb-3 tracking-wider">詳細分析</h4>
+                            <p class="text-slate-300 leading-7 text-sm text-justify whitespace-pre-wrap">${analysis.analysis || '分析中...'}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="inline-block w-12 h-12 border-4 border-slate-700 border-t-${style.color}-500 rounded-full animate-spin mb-4"></div>
+                        <p class="text-slate-400">${style.label} 分析中...</p>
+                    </div>
+                `;
+            }
         }
         
         // --- 4. 渲染畫面（單風格，保留以備用） ---
