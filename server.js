@@ -93,6 +93,155 @@ async function httpRequest(url, options = {}) {
     }
 }
 
+// --- 辅助函数：计算技术指标 ---
+function calculateTechnicalIndicators(history) {
+    if (!history || history.length < 14) {
+        return null;
+    }
+    
+    // 按日期排序（从旧到新）
+    const sorted = [...history].sort((a, b) => {
+        const dateA = a.date.split('/').map(Number);
+        const dateB = b.date.split('/').map(Number);
+        const yearA = dateA[0] + 1911;
+        const yearB = dateB[0] + 1911;
+        if (yearA !== yearB) return yearA - yearB;
+        if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
+        return dateA[2] - dateB[2];
+    });
+    
+    const closes = sorted.map(h => h.close);
+    const volumes = sorted.map(h => h.volume);
+    const highs = sorted.map(h => h.high);
+    const lows = sorted.map(h => h.low);
+    
+    // 计算移动平均线 (MA)
+    const ma5 = calculateMA(closes, 5);
+    const ma10 = calculateMA(closes, 10);
+    const ma20 = calculateMA(closes, 20);
+    
+    // 计算RSI (相对强弱指标)
+    const rsi = calculateRSI(closes, 14);
+    
+    // 计算MACD
+    const macd = calculateMACD(closes);
+    
+    // 计算布林带
+    const bollinger = calculateBollingerBands(closes, 20);
+    
+    // 计算成交量移动平均
+    const volumeMA = calculateMA(volumes, 20);
+    
+    // 计算支撑位和阻力位
+    const support = Math.min(...lows.slice(-20));
+    const resistance = Math.max(...highs.slice(-20));
+    
+    return {
+        ma5: ma5[ma5.length - 1],
+        ma10: ma10[ma10.length - 1],
+        ma20: ma20[ma20.length - 1],
+        rsi: rsi[rsi.length - 1],
+        macd: macd.macd[macd.macd.length - 1],
+        signal: macd.signal[macd.signal.length - 1],
+        histogram: macd.histogram[macd.histogram.length - 1],
+        bollingerUpper: bollinger.upper[bollinger.upper.length - 1],
+        bollingerMiddle: bollinger.middle[bollinger.middle.length - 1],
+        bollingerLower: bollinger.lower[bollinger.lower.length - 1],
+        volumeMA: volumeMA[volumeMA.length - 1],
+        support: support,
+        resistance: resistance,
+        currentPrice: closes[closes.length - 1]
+    };
+}
+
+// 计算移动平均线
+function calculateMA(data, period) {
+    const result = [];
+    for (let i = period - 1; i < data.length; i++) {
+        const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+        result.push(sum / period);
+    }
+    return result;
+}
+
+// 计算RSI
+function calculateRSI(prices, period = 14) {
+    const result = [];
+    const gains = [];
+    const losses = [];
+    
+    for (let i = 1; i < prices.length; i++) {
+        const change = prices[i] - prices[i - 1];
+        gains.push(change > 0 ? change : 0);
+        losses.push(change < 0 ? -change : 0);
+    }
+    
+    let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    
+    for (let i = period; i < gains.length; i++) {
+        avgGain = (avgGain * (period - 1) + gains[i]) / period;
+        avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+        
+        const rs = avgGain / (avgLoss || 0.0001);
+        const rsi = 100 - (100 / (1 + rs));
+        result.push(rsi);
+    }
+    
+    return result;
+}
+
+// 计算MACD
+function calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+    const emaFast = calculateEMA(prices, fastPeriod);
+    const emaSlow = calculateEMA(prices, slowPeriod);
+    
+    const macdLine = [];
+    const minLength = Math.min(emaFast.length, emaSlow.length);
+    for (let i = 0; i < minLength; i++) {
+        macdLine.push(emaFast[emaFast.length - minLength + i] - emaSlow[emaSlow.length - minLength + i]);
+    }
+    
+    const signalLine = calculateEMA(macdLine, signalPeriod);
+    const histogram = [];
+    const signalLength = signalLine.length;
+    for (let i = 0; i < signalLength; i++) {
+        histogram.push(macdLine[macdLine.length - signalLength + i] - signalLine[i]);
+    }
+    
+    return { macd: macdLine, signal: signalLine, histogram };
+}
+
+// 计算EMA (指数移动平均)
+function calculateEMA(data, period) {
+    const multiplier = 2 / (period + 1);
+    const result = [data[0]];
+    
+    for (let i = 1; i < data.length; i++) {
+        result.push((data[i] - result[result.length - 1]) * multiplier + result[result.length - 1]);
+    }
+    
+    return result;
+}
+
+// 计算布林带
+function calculateBollingerBands(prices, period = 20, stdDev = 2) {
+    const ma = calculateMA(prices, period);
+    const result = { upper: [], middle: ma, lower: [] };
+    
+    for (let i = period - 1; i < prices.length; i++) {
+        const slice = prices.slice(i - period + 1, i + 1);
+        const mean = ma[ma.length - (prices.length - i)];
+        const variance = slice.reduce((sum, price) => sum + Math.pow(price - mean, 2), 0) / period;
+        const standardDeviation = Math.sqrt(variance);
+        
+        result.upper.push(mean + (stdDev * standardDeviation));
+        result.lower.push(mean - (stdDev * standardDeviation));
+    }
+    
+    return result;
+}
+
 // 获取股票历史数据的函数（用于图表显示）
 async function fetchStockHistory(ticker, days = 30) {
     const stockCode = ticker.replace(/^0+/, '');
