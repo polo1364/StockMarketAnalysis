@@ -100,79 +100,111 @@ async function fetchStockHistory(ticker, days = 30) {
     
     try {
         // 使用 TWSE API 获取历史数据
-        // 尝试获取最近3个月的数据
+        // TWSE STOCK_DAY API 需要指定日期，格式：YYYYMMDD
         const today = new Date();
         let allHistory = [];
         
-        // 尝试获取最近3个月的数据
+        // 尝试获取最近3个月的数据（每个月尝试多个日期，因为可能遇到非交易日）
         for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
             const targetDate = new Date(today);
             targetDate.setMonth(targetDate.getMonth() - monthOffset);
-            const monthDate = `${targetDate.getFullYear()}${String(targetDate.getMonth() + 1).padStart(2, '0')}01`;
             
-            try {
-                console.log(`尝试获取历史数据: ${stockCodePadded}, 月份: ${monthDate}`);
-                const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${monthDate}&stockNo=${stockCodePadded}`;
-                
-                const response = await httpRequest(twseUrl, {
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log(`历史数据 API 响应: ${monthDate}, 状态: ${data.stat || 'unknown'}`);
+            // 尝试该月的多个日期（1号、15号、最后一天）
+            const datesToTry = [];
+            datesToTry.push(`${targetDate.getFullYear()}${String(targetDate.getMonth() + 1).padStart(2, '0')}01`);
+            datesToTry.push(`${targetDate.getFullYear()}${String(targetDate.getMonth() + 1).padStart(2, '0')}15`);
+            
+            // 获取该月最后一天
+            const lastDay = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+            datesToTry.push(`${lastDay.getFullYear()}${String(lastDay.getMonth() + 1).padStart(2, '0')}${String(lastDay.getDate()).padStart(2, '0')}`);
+            
+            for (const monthDate of datesToTry) {
+                try {
+                    console.log(`尝试获取历史数据: ${stockCodePadded}, 日期: ${monthDate}`);
+                    const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${monthDate}&stockNo=${stockCodePadded}`;
                     
-                    if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
-                        console.log(`获取到 ${data.data.length} 条历史数据记录`);
+                    const response = await httpRequest(twseUrl, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`历史数据 API 响应: ${monthDate}, 状态: ${data.stat || 'unknown'}, 消息: ${data.msg || 'N/A'}`);
                         
-                        // 解析 TWSE 返回的数据格式
-                        // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
-                        const monthHistory = data.data.map(item => {
-                            try {
-                                return {
-                                    date: item[0],
-                                    volume: parseInt(String(item[1] || '0').replace(/,/g, '')) || 0,
-                                    amount: parseFloat(String(item[2] || '0').replace(/,/g, '')) || 0,
-                                    open: parseFloat(String(item[3] || '0').replace(/,/g, '')) || 0,
-                                    high: parseFloat(String(item[4] || '0').replace(/,/g, '')) || 0,
-                                    low: parseFloat(String(item[5] || '0').replace(/,/g, '')) || 0,
-                                    close: parseFloat(String(item[6] || '0').replace(/,/g, '')) || 0,
-                                    change: parseFloat(String(item[7] || '0').replace(/,/g, '')) || 0,
-                                    transactions: parseInt(String(item[8] || '0').replace(/,/g, '')) || 0
-                                };
-                            } catch (e) {
-                                console.error(`解析历史数据项失败:`, item, e);
-                                return null;
-                            }
-                        }).filter(item => item !== null);
-                        
-                        // 过滤掉交易量为0的数据（可能是休市日）
-                        const validHistory = monthHistory.filter(item => item.volume > 0 && item.close > 0);
-                        console.log(`有效历史数据: ${validHistory.length} 条（过滤后）`);
-                        
-                        // 合并数据，避免重复
-                        for (const item of validHistory) {
-                            if (!allHistory.find(h => h.date === item.date)) {
-                                allHistory.push(item);
-                            }
+                        // 检查 API 返回状态
+                        if (data.stat && data.stat !== 'OK') {
+                            console.log(`API 返回错误状态: ${data.stat}, 消息: ${data.msg || 'N/A'}`);
+                            continue;
                         }
                         
-                        // 如果已经获取足够的数据，就停止
-                        if (allHistory.length >= days) {
-                            console.log(`已获取足够的历史数据: ${allHistory.length} 条`);
-                            break;
+                        if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                            console.log(`✅ 获取到 ${data.data.length} 条历史数据记录`);
+                            
+                            // 解析 TWSE 返回的数据格式
+                            // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
+                            const monthHistory = data.data.map(item => {
+                                try {
+                                    if (!item || !Array.isArray(item) || item.length < 7) {
+                                        return null;
+                                    }
+                                    
+                                    return {
+                                        date: item[0],
+                                        volume: parseInt(String(item[1] || '0').replace(/,/g, '')) || 0,
+                                        amount: parseFloat(String(item[2] || '0').replace(/,/g, '')) || 0,
+                                        open: parseFloat(String(item[3] || '0').replace(/,/g, '')) || 0,
+                                        high: parseFloat(String(item[4] || '0').replace(/,/g, '')) || 0,
+                                        low: parseFloat(String(item[5] || '0').replace(/,/g, '')) || 0,
+                                        close: parseFloat(String(item[6] || '0').replace(/,/g, '')) || 0,
+                                        change: parseFloat(String(item[7] || '0').replace(/,/g, '')) || 0,
+                                        transactions: parseInt(String(item[8] || '0').replace(/,/g, '')) || 0
+                                    };
+                                } catch (e) {
+                                    console.error(`解析历史数据项失败:`, item, e);
+                                    return null;
+                                }
+                            }).filter(item => item !== null && item.date);
+                            
+                            // 过滤掉交易量为0的数据（可能是休市日），但保留价格数据
+                            const validHistory = monthHistory.filter(item => item.close > 0);
+                            console.log(`有效历史数据: ${validHistory.length} 条（过滤后，原始: ${monthHistory.length} 条）`);
+                            
+                            // 合并数据，避免重复
+                            for (const item of validHistory) {
+                                if (!allHistory.find(h => h.date === item.date)) {
+                                    allHistory.push(item);
+                                }
+                            }
+                            
+                            // 如果已经获取足够的数据，就停止
+                            if (allHistory.length >= days) {
+                                console.log(`已获取足够的历史数据: ${allHistory.length} 条`);
+                                break;
+                            }
+                            
+                            // 如果这个日期成功获取到数据，就不需要尝试该月的其他日期了
+                            if (validHistory.length > 0) {
+                                break;
+                            }
+                        } else {
+                            console.log(`月份 ${monthDate} 没有数据或数据格式错误`);
                         }
                     } else {
-                        console.log(`月份 ${monthDate} 没有数据或数据格式错误`);
+                        console.log(`历史数据 API 返回状态码: ${response.status}`);
+                        const errorText = await response.text().catch(() => '');
+                        console.log(`错误响应: ${errorText.substring(0, 200)}`);
                     }
-                } else {
-                    console.log(`历史数据 API 返回状态码: ${response.status}`);
+                } catch (err) {
+                    console.error(`获取 ${monthDate} 的数据失败:`, err.message);
+                    continue;
                 }
-            } catch (err) {
-                console.error(`获取 ${monthDate} 的数据失败:`, err.message);
-                continue;
+            }
+            
+            // 如果已经获取足够的数据，就停止
+            if (allHistory.length >= days) {
+                break;
             }
         }
         
