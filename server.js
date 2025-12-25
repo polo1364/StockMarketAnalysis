@@ -892,7 +892,7 @@ app.get('/api/routes', (req, res) => {
 });
 
 // 请求超时处理（Railway 可能有超时限制）
-const REQUEST_TIMEOUT = 50000; // 50 秒（Railway 通常是 60 秒，留出缓冲）
+const REQUEST_TIMEOUT = 40000; // 40 秒（Railway 网关超时通常是 60 秒，但留出更多缓冲）
 
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
@@ -988,9 +988,9 @@ app.post('/api/analyze', async (req, res) => {
             console.log('注意：使用演示數據');
         }
 
-        // --- 2. 获取历史数据和技术指标 ---
+        // --- 2. 获取历史数据和技术指标（优化：减少天数以加快速度）---
         console.log('正在获取历史数据和技术指标...');
-        const stockHistory = await fetchStockHistory(ticker, 60); // 获取60天数据用于技术分析
+        const stockHistory = await fetchStockHistory(ticker, 30); // 获取30天数据用于技术分析（减少数据量以加快速度）
         const technicalIndicators = stockHistory && stockHistory.length >= 14 ? calculateTechnicalIndicators(stockHistory) : null;
         
         if (technicalIndicators) {
@@ -1097,9 +1097,9 @@ ${technicalInfo}
 10. **風險評估必須具體明確，不能泛泛而談**
 `;
 
-        // 设置 Gemini API 超时（增加到45秒，因为分析更复杂）
+        // 设置 Gemini API 超时（35秒，确保在总超时前完成）
         const geminiTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Gemini API 超时')), 45000)
+            setTimeout(() => reject(new Error('Gemini API 超时')), 35000)
         );
         
         const result = await Promise.race([
@@ -1240,8 +1240,8 @@ ${technicalInfo}
             }
         });
 
-        // --- 3. 获取历史数据（用于图表，如果之前没有获取或需要更多数据） ---
-        const chartHistory = stockHistory && stockHistory.length >= 30 ? stockHistory.slice(-30) : await fetchStockHistory(ticker, 30);
+        // --- 3. 使用已获取的历史数据（用于图表，避免重复请求以加快速度） ---
+        const chartHistory = stockHistory || [];
         
         // --- 4. 等待所有分析完成 ---
         const analyses = await Promise.all(analysisPromises);
