@@ -512,8 +512,9 @@
             <!-- 結果列表 -->
             <div class="p-5 overflow-y-auto max-h-[50vh]">
                 <div id="filter-loading" class="hidden py-10 text-center">
-                    <div class="inline-block w-10 h-10 border-3 border-slate-700 border-t-orange-500 rounded-full animate-spin mb-3"></div>
+                    <div class="inline-block w-10 h-10 border-4 border-slate-700 border-t-orange-500 rounded-full animate-spin mb-3"></div>
                     <p class="text-slate-400 text-sm">正在篩選股票...</p>
+                    <p class="text-slate-500 text-xs mt-2">（首次搜尋可能需要 10-20 秒）</p>
                 </div>
                 
                 <div id="filter-results" class="hidden">
@@ -583,7 +584,19 @@
             searchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 搜尋中...';
             
             try {
-                const response = await fetch(`${API_BASE_URL}/api/filter/low-price?max=${maxPrice}&limit=50`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 秒超時
+                
+                const response = await fetch(`${API_BASE_URL}/api/filter/low-price?max=${maxPrice}&limit=50`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `伺服器錯誤 (${response.status})`);
+                }
+                
                 const data = await response.json();
                 
                 loadingEl.classList.add('hidden');
@@ -621,7 +634,12 @@
                 console.error('篩選錯誤:', error);
                 loadingEl.classList.add('hidden');
                 emptyEl.classList.remove('hidden');
-                alert('篩選失敗，請稍後再試');
+                
+                if (error.name === 'AbortError') {
+                    alert('請求超時，請稍後再試');
+                } else {
+                    alert(`篩選失敗：${error.message || '請稍後再試'}`);
+                }
             } finally {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = '<i class="fa-solid fa-search"></i> 搜尋';

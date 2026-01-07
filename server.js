@@ -985,7 +985,7 @@ app.get('/api/history/:ticker', async (req, res) => {
     }
 });
 
-// 低價股篩選 API（使用 TaiwanStockPER 資料集）
+// 低價股篩選 API（逐一查詢方式）
 app.get('/api/filter/low-price', async (req, res) => {
     try {
         const maxPrice = parseFloat(req.query.max) || 10;
@@ -996,90 +996,75 @@ app.get('/api/filter/low-price', async (req, res) => {
         // 獲取股票列表
         const stockList = await getStockInfoList();
         
-        // 建立股票名稱對照表
-        const stockNameMap = new Map();
-        stockList.forEach(s => {
-            if (s.stock_id && s.stock_name) {
-                stockNameMap.set(s.stock_id, {
-                    name: s.stock_name,
-                    industry: s.industry_category || '未分類'
-                });
-            }
+        // 過濾出上市股票（4位數代碼）
+        const validStocks = stockList.filter(s => {
+            const code = String(s.stock_id || '');
+            return code.length === 4 && /^\d{4}$/.test(code);
         });
         
-        // 獲取最近的日期
+        console.log(`共有 ${validStocks.length} 支股票待篩選`);
+        
+        // 隨機取樣一部分股票進行查詢（避免 API 限制）
+        const sampleSize = Math.min(200, validStocks.length);
+        const sampledStocks = validStocks
+            .sort(() => Math.random() - 0.5)
+            .slice(0, sampleSize);
+        
         const endDate = new Date();
         const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 5); // 只取最近 5 天
+        startDate.setDate(endDate.getDate() - 3);
         
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
         
-        // 使用 TaiwanStockPER 資料集（包含收盤價，且資料量較小）
-        const url = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPER&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
-        
-        console.log('正在獲取 PER 資料...');
-        
-        const response = await fetch(url, { timeout: 30000 });
-        if (!response.ok) {
-            throw new Error(`API 回應錯誤: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.status !== 200) {
-            console.error('FinMind API 錯誤:', data.msg);
-            throw new Error(data.msg || '獲取資料失敗');
-        }
-        
-        if (!data.data || data.data.length === 0) {
-            return res.json({
-                count: 0,
-                maxPrice: maxPrice,
-                stocks: [],
-                message: '暫無資料，請稍後再試'
-            });
-        }
-        
-        console.log(`獲取到 ${data.data.length} 筆 PER 資料`);
-        
-        // 取每支股票最新價格（使用 close 欄位）
-        const priceMap = new Map();
-        data.data.forEach(item => {
-            const code = item.stock_id;
-            const price = parseFloat(item.close || item.Close || 0);
-            const date = item.date;
-            
-            // 只保留 4 位數代碼的一般股票
-            if (code && code.length === 4 && /^\d{4}$/.test(code) && price > 0) {
-                if (!priceMap.has(code) || priceMap.get(code).date < date) {
-                    priceMap.set(code, { 
-                        price, 
-                        date,
-                        pe: parseFloat(item.PER || 0),
-                        pb: parseFloat(item.PBR || 0),
-                        dividendYield: parseFloat(item.dividend_yield || 0)
-                    });
-                }
-            }
-        });
-        
-        // 篩選低價股
         const lowPriceStocks = [];
+        const batchSize = 10; // 每批查詢數量
         
-        for (const [code, priceInfo] of priceMap) {
-            if (priceInfo.price <= maxPrice) {
-                const stockInfo = stockNameMap.get(code);
-                lowPriceStocks.push({
-                    code: code,
-                    name: stockInfo?.name || code,
-                    price: priceInfo.price,
-                    pe: priceInfo.pe > 0 ? priceInfo.pe.toFixed(2) : 'N/A',
-                    pb: priceInfo.pb > 0 ? priceInfo.pb.toFixed(2) : 'N/A',
-                    dividendYield: priceInfo.dividendYield > 0 ? priceInfo.dividendYield.toFixed(2) + '%' : 'N/A',
-                    industry: stockInfo?.industry || '未分類'
-                });
-            }
+        // 分批查詢
+        for (let i = 0; i < sampledStocks.length && lowPriceStocks.length < limit; i += batchSize) {
+            const batch = sampledStocks.slice(i, i + batchSize);
+            
+            const promises = batch.map(async (stock) => {
+                try {
+                    const url = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPER&data_id=${stock.stock_id}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+                    
+                    const response = await fetch(url);
+                    if (!response.ok) return null;
+                    
+                    const data = await response.json();
+                    if (data.status !== 200 || !data.data || data.data.length === 0) return null;
+                    
+                    // 取最新一筆
+                    const latest = data.data[data.data.length - 1];
+                    const price = parseFloat(latest.close || 0);
+                    
+                    if (price > 0 && price <= maxPrice) {
+                        return {
+                            code: stock.stock_id,
+                            name: stock.stock_name || stock.stock_id,
+                            price: price,
+                            pe: latest.PER ? parseFloat(latest.PER).toFixed(2) : 'N/A',
+                            pb: latest.PBR ? parseFloat(latest.PBR).toFixed(2) : 'N/A',
+                            dividendYield: latest.dividend_yield ? parseFloat(latest.dividend_yield).toFixed(2) + '%' : 'N/A',
+                            industry: stock.industry_category || '未分類'
+                        };
+                    }
+                    return null;
+                } catch (err) {
+                    return null;
+                }
+            });
+            
+            const results = await Promise.all(promises);
+            results.forEach(r => {
+                if (r) lowPriceStocks.push(r);
+            });
+            
+            // 如果已經找到足夠數量，提前結束
+            if (lowPriceStocks.length >= limit) break;
+            
+            // 小延遲避免 API 限制
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
         
         // 按價格排序
@@ -1090,7 +1075,8 @@ app.get('/api/filter/low-price', async (req, res) => {
         res.json({
             count: lowPriceStocks.length,
             maxPrice: maxPrice,
-            stocks: lowPriceStocks.slice(0, limit)
+            stocks: lowPriceStocks.slice(0, limit),
+            note: '結果為抽樣篩選，可能未包含所有低價股'
         });
         
     } catch (err) {
