@@ -1016,31 +1016,64 @@
                 document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
             
-            // 填寫財務指標（ETF 顯示特殊樣式）
+            // 填寫財務指標（ETF 顯示特殊樣式，N/A 顯示友善說明）
             const peEl = document.getElementById('metric-pe');
             const pbEl = document.getElementById('metric-pb');
+            const dividendEl = document.getElementById('metric-dividend');
+            const volumeEl = document.getElementById('metric-volume');
             
+            // 本益比
             if (m.pe === 'ETF不適用') {
                 peEl.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else if (m.pe === 'N/A' || !m.pe) {
+                peEl.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：虧損中或資料未公開">暫無資料</span>`;
             } else {
                 peEl.innerText = m.pe;
             }
             
-            document.getElementById('metric-dividend').innerText = m.dividendYield !== 'N/A' ? `${m.dividendYield}%` : 'N/A';
+            // 股息率
+            if (m.dividendYield !== 'N/A' && m.dividendYield) {
+                dividendEl.innerText = `${m.dividendYield}%`;
+            } else {
+                dividendEl.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：近一年未配息">未配息</span>`;
+            }
             
+            // 股價淨值比
             if (m.pb === 'ETF不適用') {
                 pbEl.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else if (m.pb === 'N/A' || !m.pb) {
+                pbEl.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：資料未公開或計算中">暫無資料</span>`;
             } else {
                 pbEl.innerText = m.pb;
             }
-            document.getElementById('metric-volume').innerText = m.volume > 0 ? (m.volume >= 1000000 ? `${(m.volume / 1000000).toFixed(2)}M` : m.volume >= 1000 ? `${(m.volume / 1000).toFixed(1)}K` : m.volume.toLocaleString()) : 'N/A';
             
-            // 填寫價格區間
-            document.getElementById('metric-prev-close').innerText = m.previousClose > 0 ? m.previousClose.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-high').innerText = m.dayHigh > 0 ? m.dayHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-low').innerText = m.dayLow > 0 ? m.dayLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-52w-high').innerText = m.fiftyTwoWeekHigh > 0 ? m.fiftyTwoWeekHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-52w-low').innerText = m.fiftyTwoWeekLow > 0 ? m.fiftyTwoWeekLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            // 成交量
+            if (m.volume > 0) {
+                if (m.volume >= 1000000) {
+                    volumeEl.innerText = `${(m.volume / 1000000).toFixed(2)}M`;
+                } else if (m.volume >= 1000) {
+                    volumeEl.innerText = `${(m.volume / 1000).toFixed(1)}K`;
+                } else {
+                    volumeEl.innerText = m.volume.toLocaleString();
+                }
+            } else {
+                volumeEl.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：休市或停牌">休市中</span>`;
+            }
+            
+            // 填寫價格區間（N/A 改為友善說明）
+            const formatPrice = (value, el, hint) => {
+                if (value > 0) {
+                    el.innerText = value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                } else {
+                    el.innerHTML = `<span class="text-slate-500 text-sm" title="${hint}">--</span>`;
+                }
+            };
+            
+            formatPrice(m.previousClose, document.getElementById('metric-prev-close'), '前一交易日收盤價');
+            formatPrice(m.dayHigh, document.getElementById('metric-high'), '今日尚未有成交');
+            formatPrice(m.dayLow, document.getElementById('metric-low'), '今日尚未有成交');
+            formatPrice(m.fiftyTwoWeekHigh, document.getElementById('metric-52w-high'), '資料不足52週');
+            formatPrice(m.fiftyTwoWeekLow, document.getElementById('metric-52w-low'), '資料不足52週');
 
             // --- B. 填寫籌碼面數據 ---
             const chipSection = document.getElementById('chip-data-section');
@@ -1422,11 +1455,11 @@
                             </div>
                             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                                 <div class="text-xs text-slate-400 mb-1">目標價</div>
-                                <div class="text-lg font-bold text-green-400">${analysis.target_price || 'N/A'}</div>
+                                <div class="text-lg font-bold text-green-400">${analysis.target_price && analysis.target_price !== 'N/A' ? analysis.target_price : '<span class="text-slate-500 text-sm">分析中</span>'}</div>
                             </div>
                             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                                 <div class="text-xs text-slate-400 mb-1">止損價</div>
-                                <div class="text-lg font-bold text-red-400">${analysis.stop_loss || 'N/A'}</div>
+                                <div class="text-lg font-bold text-red-400">${analysis.stop_loss && analysis.stop_loss !== 'N/A' ? analysis.stop_loss : '<span class="text-slate-500 text-sm">分析中</span>'}</div>
                             </div>
                         </div>
                         
@@ -1434,11 +1467,11 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
                             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                                 <div class="text-xs text-slate-400 mb-1">投資時程</div>
-                                <div class="text-sm font-semibold text-slate-200">${analysis.time_horizon || 'N/A'}</div>
+                                <div class="text-sm font-semibold text-slate-200">${analysis.time_horizon && analysis.time_horizon !== 'N/A' ? analysis.time_horizon : '<span class="text-slate-500 text-sm">依風格而定</span>'}</div>
                             </div>
                             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                                 <div class="text-xs text-slate-400 mb-1">建議倉位</div>
-                                <div class="text-sm font-semibold text-slate-200">${analysis.position_sizing || 'N/A'}</div>
+                                <div class="text-sm font-semibold text-slate-200">${analysis.position_sizing && analysis.position_sizing !== 'N/A' ? analysis.position_sizing : '<span class="text-slate-500 text-sm">依資金配置</span>'}</div>
                             </div>
                         </div>
                         
@@ -1553,31 +1586,64 @@
                 document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
             
-            // 填寫財務指標（ETF 顯示特殊樣式）
+            // 填寫財務指標（ETF 顯示特殊樣式，N/A 顯示友善說明）
             const peEl2 = document.getElementById('metric-pe');
+            const dividendEl2 = document.getElementById('metric-dividend');
+            const pbEl2 = document.getElementById('metric-pb');
+            const volumeEl2 = document.getElementById('metric-volume');
+            
+            // 本益比
             if (m.pe === 'ETF不適用') {
                 peEl2.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else if (m.pe === 'N/A' || !m.pe) {
+                peEl2.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：虧損中或資料未公開">暫無資料</span>`;
             } else {
                 peEl2.innerText = m.pe;
             }
-            document.getElementById('metric-dividend').innerText = m.dividendYield !== 'N/A' ? `${m.dividendYield}%` : 'N/A';
             
-            // PB 處理（ETF 顯示特殊樣式）
-            const pbEl2 = document.getElementById('metric-pb');
+            // 股息率
+            if (m.dividendYield !== 'N/A' && m.dividendYield) {
+                dividendEl2.innerText = `${m.dividendYield}%`;
+            } else {
+                dividendEl2.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：近一年未配息">未配息</span>`;
+            }
+            
+            // 股價淨值比
             if (m.pb === 'ETF不適用') {
                 pbEl2.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else if (m.pb === 'N/A' || !m.pb) {
+                pbEl2.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：資料未公開或計算中">暫無資料</span>`;
             } else {
                 pbEl2.innerText = m.pb;
             }
             
-            document.getElementById('metric-volume').innerText = m.volume > 0 ? (m.volume >= 1000000 ? `${(m.volume / 1000000).toFixed(2)}M` : m.volume >= 1000 ? `${(m.volume / 1000).toFixed(1)}K` : m.volume.toLocaleString()) : 'N/A';
+            // 成交量
+            if (m.volume > 0) {
+                if (m.volume >= 1000000) {
+                    volumeEl2.innerText = `${(m.volume / 1000000).toFixed(2)}M`;
+                } else if (m.volume >= 1000) {
+                    volumeEl2.innerText = `${(m.volume / 1000).toFixed(1)}K`;
+                } else {
+                    volumeEl2.innerText = m.volume.toLocaleString();
+                }
+            } else {
+                volumeEl2.innerHTML = `<span class="text-slate-500 text-sm" title="可能原因：休市或停牌">休市中</span>`;
+            }
             
-            // 填寫價格區間
-            document.getElementById('metric-prev-close').innerText = m.previousClose > 0 ? m.previousClose.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-high').innerText = m.dayHigh > 0 ? m.dayHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-low').innerText = m.dayLow > 0 ? m.dayLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-52w-high').innerText = m.fiftyTwoWeekHigh > 0 ? m.fiftyTwoWeekHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
-            document.getElementById('metric-52w-low').innerText = m.fiftyTwoWeekLow > 0 ? m.fiftyTwoWeekLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+            // 填寫價格區間（N/A 改為友善說明）
+            const formatPrice2 = (value, el, hint) => {
+                if (value > 0) {
+                    el.innerText = value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                } else {
+                    el.innerHTML = `<span class="text-slate-500 text-sm" title="${hint}">--</span>`;
+                }
+            };
+            
+            formatPrice2(m.previousClose, document.getElementById('metric-prev-close'), '前一交易日收盤價');
+            formatPrice2(m.dayHigh, document.getElementById('metric-high'), '今日尚未有成交');
+            formatPrice2(m.dayLow, document.getElementById('metric-low'), '今日尚未有成交');
+            formatPrice2(m.fiftyTwoWeekHigh, document.getElementById('metric-52w-high'), '資料不足52週');
+            formatPrice2(m.fiftyTwoWeekLow, document.getElementById('metric-52w-low'), '資料不足52週');
 
             // 處理漲跌顏色 (Yahoo 回傳的是字串帶 %，先判斷正負)
             const changeStr = m.change || "0%";
