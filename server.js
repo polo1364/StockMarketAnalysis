@@ -233,9 +233,9 @@ async function fetchFromFinMind(dataset, stockCode, startDate, endDate) {
 }
 
 async function fetchStockFinancials(ticker) {
-    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
-    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
-    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
+    // 處理股票代碼：直接使用清理後的代碼
+    const stockCode = ticker.replace(/\s/g, '').toUpperCase();
+    console.log(`fetchStockFinancials: 查詢 ${stockCode}`);
     
     try {
         const endDate = new Date();
@@ -298,15 +298,15 @@ async function fetchStockFinancials(ticker) {
             }
         }
         
-        
-        return {
-            pe: pe && pe > 0 ? pe : null,
-            dividendYield: dividendYield && dividendYield > 0 ? dividendYield : null,
-            pb: pb && pb > 0 ? pb : null
-        };
+                    
+                    return {
+                        pe: pe && pe > 0 ? pe : null,
+                        dividendYield: dividendYield && dividendYield > 0 ? dividendYield : null,
+                        pb: pb && pb > 0 ? pb : null
+                    };
     } catch (err) {
         console.error('獲取財務指標失敗:', err);
-        return { pe: null, dividendYield: null, pb: null };
+    return { pe: null, dividendYield: null, pb: null };
     }
 }
 
@@ -366,8 +366,8 @@ async function fetchInstitutionalInvestors(ticker, days = 10) {
                 dealerToday = parseInt(item.buy) - parseInt(item.sell) || 0;
             }
         });
-        
-        return {
+                
+                return {
             foreign: { today: foreignToday, total: foreignTotal },
             investmentTrust: { today: investmentTrustToday, total: investmentTrustTotal },
             dealer: { today: dealerToday, total: dealerTotal },
@@ -411,8 +411,8 @@ async function fetchMarginTrading(ticker, days = 10) {
         
         // 券資比
         const marginShortRatio = marginBalance > 0 ? ((shortBalance / marginBalance) * 100).toFixed(2) : 0;
-        
-        return {
+                
+                return {
             marginBalance: marginBalance,
             marginChange: marginChange,
             shortBalance: shortBalance,
@@ -458,24 +458,24 @@ async function fetchMonthlyRevenue(ticker) {
         // 計算近 3 個月平均
         const recent3 = data.slice(-3);
         const avg3Month = recent3.reduce((sum, item) => sum + parseInt(item.revenue || item.Revenue || 0), 0) / 3;
-        
-        return {
+                    
+                    return {
             revenue: revenue,
             revenueDate: latest.date || latest.revenue_month,
             yoyGrowth: yoyGrowth ? parseFloat(yoyGrowth) : null,
             avg3MonthRevenue: Math.round(avg3Month),
             isGrowing: yoyGrowth > 0
         };
-    } catch (err) {
+        } catch (err) {
         console.error('獲取月營收失敗:', err.message);
         return null;
     }
 }
 
 async function fetchStockHistory(ticker, days = 30) {
-    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
-    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
-    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
+    // 處理股票代碼：直接使用清理後的代碼
+    const stockCode = ticker.replace(/\s/g, '').toUpperCase();
+    console.log(`fetchStockHistory: 查詢 ${stockCode}, ${days} 天`);
     
     try {
         const endDate = new Date();
@@ -543,23 +543,31 @@ async function fetchStockHistory(ticker, days = 30) {
 }
 
 async function fetchStockData(ticker) {
-    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
+    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數正常處理
     const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
-    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
+    // 不要移除前導零，直接使用原始代碼
+    const stockCode = cleanTicker;
+    
+    console.log(`fetchStockData: 查詢股票 ${ticker} -> ${stockCode}`);
     
     try {
         const endDate = new Date();
         const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 30);
+        startDate.setDate(endDate.getDate() - 60); // 擴大到 60 天
         
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
         
+        console.log(`查詢日期範圍: ${startDateStr} ~ ${endDateStr}`);
+        
         const priceData = await fetchFromFinMind('TaiwanStockPrice', stockCode, startDateStr, endDateStr);
         
         if (!priceData || priceData.length === 0) {
+            console.log(`找不到 ${stockCode} 的價格數據`);
             return null;
         }
+        
+        console.log(`獲取到 ${priceData.length} 筆價格數據`);
         
         const latestPrice = priceData[priceData.length - 1];
         const previousPrice = priceData.length > 1 ? priceData[priceData.length - 2] : latestPrice;
@@ -657,9 +665,9 @@ async function analyzeWithGemini(marketData, technicalIndicators, style, ticker,
         const currentDate = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         
-        let technicalInfo = '';
-        if (technicalIndicators) {
-            technicalInfo = `
+                let technicalInfo = '';
+                if (technicalIndicators) {
+                    technicalInfo = `
 技術指標分析：
 - RSI (相對強弱指標): ${technicalIndicators.rsi?.toFixed(2)} ${technicalIndicators.rsi > 70 ? '(超買)' : technicalIndicators.rsi < 30 ? '(超賣)' : '(正常)'}
 - MACD: ${technicalIndicators.macd?.toFixed(2)}, 信號線: ${technicalIndicators.signal?.toFixed(2)}, 柱狀圖: ${technicalIndicators.histogram?.toFixed(2)}
@@ -669,8 +677,8 @@ async function analyzeWithGemini(marketData, technicalIndicators, style, ticker,
 - 技術阻力位: ${technicalIndicators.resistance?.toFixed(2)}
 - 當前價格相對位置: ${((marketData.price - technicalIndicators.support) / (technicalIndicators.resistance - technicalIndicators.support) * 100).toFixed(1)}%
 `;
-        }
-        
+                }
+                
         // 籌碼面資訊
         let chipInfo = '';
         if (marketData.institutional) {
@@ -709,7 +717,7 @@ async function analyzeWithGemini(marketData, technicalIndicators, style, ticker,
 `;
         }
         
-        const prompt = `
+                const prompt = `
 你是一位資深專業的股票分析師，擁有20年以上的投資經驗，請使用繁體中文進行深度分析（專業術語如 PE、ROE、EPS、RSI、MACD 等可保留英文縮寫）。
 
 **重要提醒：當前日期為 ${currentDate} ${currentTime}，請使用最新的市場數據和資訊進行分析。**
@@ -804,13 +812,13 @@ ${revenueInfo}
                     console.warn(`❌ 端點 ${i + 1} 失敗: ${errorMsg}`);
                     lastError = new Error(`Gemini API 錯誤: ${errorMsg}`);
                     // 繼續嘗試下一個端點
-                    continue;
-                }
+                        continue;
+                    }
             } catch (err) {
                 lastError = err;
                 console.warn(`❌ 端點 ${i + 1} 異常:`, err.message);
                 // 繼續嘗試下一個端點
-                continue;
+                        continue;
             }
         }
         
@@ -823,7 +831,7 @@ ${revenueInfo}
         
         if (result.candidates?.[0]?.content?.parts) {
             aiText = result.candidates[0].content.parts.map(part => part.text).join('').trim();
-        } else {
+            } else {
             throw new Error('Gemini API 回應格式錯誤');
         }
         
@@ -838,24 +846,24 @@ ${revenueInfo}
         }
         
         throw new Error('無法找到 JSON');
-    } catch (err) {
+            } catch (err) {
         console.error(`分析風格 ${style} 失敗:`, err.message);
-        return {
-            summary: "分析失敗，請稍後再試。",
-            analysis: `無法獲取分析結果。錯誤: ${err.message}`,
-            action: "持有",
-            risk_level: "中",
-            target_price: "N/A",
-            stop_loss: "N/A",
-            time_horizon: "N/A",
-            position_sizing: "N/A",
-            bullish_points: [],
-            bearish_points: [],
-            key_levels: {},
-            industry_comparison: "N/A",
-            catalyst: "N/A"
-        };
-    }
+                return {
+                    summary: "分析失敗，請稍後再試。",
+                    analysis: `無法獲取分析結果。錯誤: ${err.message}`,
+                    action: "持有",
+                    risk_level: "中",
+                    target_price: "N/A",
+                    stop_loss: "N/A",
+                    time_horizon: "N/A",
+                    position_sizing: "N/A",
+                    bullish_points: [],
+                    bearish_points: [],
+                    key_levels: {},
+                    industry_comparison: "N/A",
+                    catalyst: "N/A"
+                };
+            }
 }
 
 // ========== API 路由 ==========
@@ -888,7 +896,7 @@ app.post('/api/analyze', async (req, res) => {
                 stockCode = searchResult.code;
                 searchedName = searchResult.name;
                 console.log(`找到股票: ${searchedName} (${stockCode})`);
-            } else {
+        } else {
                 return res.status(404).json({ error: `找不到股票「${ticker}」，請確認名稱或使用股票代碼` });
             }
         }
@@ -940,7 +948,7 @@ app.post('/api/analyze', async (req, res) => {
         }
         
         // 返回結果
-        res.json({
+            res.json({
             marketData,
             analyses,
             history,
