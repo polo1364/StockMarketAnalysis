@@ -177,42 +177,57 @@ async function fetchStockFinancials(ticker) {
         
         let pe = null, dividendYield = null, pb = null;
         
-        // 獲取本益比
+        // 獲取本益比、殖利率、股價淨值比（從 TaiwanStockPER）
         try {
-            const peData = await fetchFromFinMind('TaiwanStockPER', stockCode, startDateStr, endDateStr);
-            if (peData && peData.length > 0) {
-                const latestPE = peData[peData.length - 1];
-                pe = parseFloat(latestPE.PER || latestPE.per || latestPE.PE_ratio || latestPE.pe_ratio || 0);
-            }
-        } catch (err) {
-            console.error('獲取本益比失敗:', err.message);
-        }
-        
-        // 獲取股息率
-        try {
-            const dividendData = await fetchFromFinMind('TaiwanStockDividendResult', stockCode, startDateStr, endDateStr);
-            if (dividendData && dividendData.length > 0) {
-                const latestDividend = dividendData[dividendData.length - 1];
-                const cashDividend = parseFloat(latestDividend.CashEarningsDistribution || latestDividend.cash_dividend || 0);
-                // 需要從價格計算股息率
-                if (cashDividend > 0) {
-                    dividendYield = cashDividend; // 暫存現金股利，稍後計算
+            const perData = await fetchFromFinMind('TaiwanStockPER', stockCode, startDateStr, endDateStr);
+            if (perData && perData.length > 0) {
+                const latestPER = perData[perData.length - 1];
+                console.log(`TaiwanStockPER 資料欄位:`, Object.keys(latestPER));
+                console.log(`TaiwanStockPER 最新資料:`, JSON.stringify(latestPER));
+                
+                // 本益比
+                pe = parseFloat(latestPER.PER || latestPER.per || latestPER.PE_ratio || latestPER.pe_ratio || 0);
+                
+                // 殖利率
+                const dyValue = parseFloat(latestPER.dividend_yield || latestPER.DividendYield || latestPER.Dividend_Yield || 0);
+                if (dyValue > 0) {
+                    dividendYield = dyValue;
+                    console.log(`殖利率: ${dyValue}%`);
                 }
+                
+                // 股價淨值比
+                pb = parseFloat(latestPER.PBR || latestPER.pbr || latestPER.PB_ratio || latestPER.pb_ratio || 0);
             }
         } catch (err) {
-            console.error('獲取股息資料失敗:', err.message);
+            console.error('獲取 TaiwanStockPER 失敗:', err.message);
         }
         
-        // 獲取股價淨值比
-        try {
-            const pbData = await fetchFromFinMind('TaiwanStockPER', stockCode, startDateStr, endDateStr);
-            if (pbData && pbData.length > 0) {
-                const latestPB = pbData[pbData.length - 1];
-                pb = parseFloat(latestPB.PBR || latestPB.pbr || latestPB.PB_ratio || latestPB.pb_ratio || 0);
+        // 如果沒有殖利率，從股利政策計算
+        if (!dividendYield || dividendYield <= 0) {
+            try {
+                const dividendData = await fetchFromFinMind('TaiwanStockDividend', stockCode, startDateStr, endDateStr);
+                if (dividendData && dividendData.length > 0) {
+                    const latestDividend = dividendData[dividendData.length - 1];
+                    console.log('TaiwanStockDividend 資料欄位:', Object.keys(latestDividend));
+                    console.log('TaiwanStockDividend 最新資料:', JSON.stringify(latestDividend));
+                    
+                    const cashDividend = parseFloat(
+                        latestDividend.CashEarningsDistribution || 
+                        latestDividend.cash_dividend || 
+                        latestDividend.CashDividend ||
+                        latestDividend.cash_earnings_distribution ||
+                        0
+                    );
+                    if (cashDividend > 0) {
+                        dividendYield = cashDividend; // 暫存現金股利，稍後用股價計算殖利率
+                        console.log(`現金股利: ${cashDividend}`);
+                    }
+                }
+            } catch (err) {
+                console.error('獲取股息資料失敗:', err.message);
             }
-        } catch (err) {
-            console.error('獲取股價淨值比失敗:', err.message);
         }
+        
         
         return {
             pe: pe && pe > 0 ? pe : null,
