@@ -1006,14 +1006,18 @@
             document.getElementById('stock-name').innerText = m.name;
             document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
             // 處理 ETF 的本益比顯示
+            // 即時行情區的本益比
+            const stockPeEl = document.getElementById('stock-pe');
             if (m.isETF && m.pe === 'ETF不適用') {
-                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">ETF</span>`;
+                stockPeEl.innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">ETF</span>`;
+            } else if (m.pe === 'N/A' || !m.pe || m.pe === 'null') {
+                stockPeEl.innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">本益比: 暫無</span>`;
             } else {
-                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+                stockPeEl.innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
             }
             
             if (m.isDemo) {
-                document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
+                stockPeEl.innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
             
             // 填寫財務指標（ETF 顯示特殊樣式，N/A 顯示友善說明）
@@ -1574,16 +1578,19 @@
             updateSavedStockName(m.name);
             // 處理小數點顯示
             document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
-            // 處理 ETF 的本益比顯示
+            // 即時行情區的本益比（備用渲染函數）
+            const stockPeEl2 = document.getElementById('stock-pe');
             if (m.isETF && m.pe === 'ETF不適用') {
-                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">ETF</span>`;
+                stockPeEl2.innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">ETF</span>`;
+            } else if (m.pe === 'N/A' || !m.pe || m.pe === 'null') {
+                stockPeEl2.innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">本益比: 暫無</span>`;
             } else {
-                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+                stockPeEl2.innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
             }
             
             // 如果是演示數據，顯示提示
             if (m.isDemo) {
-                document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
+                stockPeEl2.innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
             
             // 填寫財務指標（ETF 顯示特殊樣式，N/A 顯示友善說明）
