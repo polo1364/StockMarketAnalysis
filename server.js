@@ -219,17 +219,28 @@ async function searchStock(query) {
 async function fetchFromFinMind(dataset, stockCode, startDate, endDate) {
     const url = `${FINMIND_API_BASE_URL}?dataset=${dataset}&data_id=${stockCode}&start_date=${startDate}&end_date=${endDate}&token=${FINMIND_API_TOKEN}`;
     
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`FinMind API 錯誤: ${response.status}`);
-    }
+    console.log(`fetchFromFinMind: ${dataset} / ${stockCode}`);
     
-    const data = await response.json();
-    if (data.status !== 200) {
-        throw new Error(`FinMind API 錯誤: ${data.msg || '未知錯誤'}`);
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`FinMind API HTTP 錯誤: ${response.status}`);
+            return [];
+        }
+        
+        const data = await response.json();
+        
+        if (data.status !== 200) {
+            console.error(`FinMind API 回應錯誤: ${data.msg || '未知錯誤'}`);
+            return [];
+        }
+        
+        console.log(`fetchFromFinMind: 獲取到 ${(data.data || []).length} 筆資料`);
+        return data.data || [];
+    } catch (err) {
+        console.error(`fetchFromFinMind 錯誤:`, err.message);
+        return [];
     }
-    
-    return data.data || [];
 }
 
 async function fetchStockFinancials(ticker) {
@@ -543,17 +554,16 @@ async function fetchStockHistory(ticker, days = 30) {
 }
 
 async function fetchStockData(ticker) {
-    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數正常處理
-    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
-    // 不要移除前導零，直接使用原始代碼
-    const stockCode = cleanTicker;
+    // 處理股票代碼：直接使用清理後的代碼
+    const stockCode = String(ticker).replace(/\s/g, '').toUpperCase();
     
-    console.log(`fetchStockData: 查詢股票 ${ticker} -> ${stockCode}`);
+    console.log(`\n========== fetchStockData 開始 ==========`);
+    console.log(`原始輸入: "${ticker}", 處理後: "${stockCode}"`);
     
     try {
         const endDate = new Date();
         const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 60); // 擴大到 60 天
+        startDate.setDate(endDate.getDate() - 90); // 擴大到 90 天
         
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
@@ -562,12 +572,18 @@ async function fetchStockData(ticker) {
         
         const priceData = await fetchFromFinMind('TaiwanStockPrice', stockCode, startDateStr, endDateStr);
         
+        console.log(`TaiwanStockPrice 返回: ${priceData ? priceData.length : 'null'} 筆`);
+        
         if (!priceData || priceData.length === 0) {
-            console.log(`找不到 ${stockCode} 的價格數據`);
+            console.log(`❌ 找不到 ${stockCode} 的價格數據`);
+            console.log(`========== fetchStockData 結束 (失敗) ==========\n`);
             return null;
         }
         
-        console.log(`獲取到 ${priceData.length} 筆價格數據`);
+        console.log(`✅ 獲取到 ${priceData.length} 筆價格數據`);
+        if (priceData.length > 0) {
+            console.log(`最新一筆:`, JSON.stringify(priceData[priceData.length - 1]));
+        }
         
         const latestPrice = priceData[priceData.length - 1];
         const previousPrice = priceData.length > 1 ? priceData[priceData.length - 2] : latestPrice;
@@ -904,7 +920,24 @@ app.post('/api/analyze', async (req, res) => {
         // 獲取股票數據
         const stockData = await fetchStockData(stockCode);
         if (!stockData) {
-            return res.status(404).json({ error: '找不到股票數據' });
+            // 嘗試從股票列表中查找更多資訊
+            const stockList = await getStockInfoList();
+            const stockInfo = stockList.find(s => String(s.stock_id) === stockCode);
+            
+            if (stockInfo) {
+                // 股票存在但沒有近期交易數據
+                return res.status(404).json({ 
+                    error: `股票 ${stockCode}（${stockInfo.stock_name}）目前無法查詢，可能原因：已下市、暫停交易或無近期數據`,
+                    stockInfo: {
+                        code: stockInfo.stock_id,
+                        name: stockInfo.stock_name,
+                        industry: stockInfo.industry_category,
+                        type: stockInfo.type
+                    }
+                });
+            } else {
+                return res.status(404).json({ error: `找不到股票代碼 ${stockCode}，請確認代碼是否正確` });
+            }
         }
         
         console.log(`股票數據獲取成功: ${stockData.longName}`);
