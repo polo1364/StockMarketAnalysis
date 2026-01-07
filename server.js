@@ -472,20 +472,38 @@ async function fetchStockFinancials(ticker) {
                     // 取最新的本益比資料
                     const latestPE = peData.data[peData.data.length - 1];
                     console.log(`本益比資料範例:`, JSON.stringify(latestPE));
-                    // 嘗試多種可能的欄位名稱
-                    pe = parseFloat(
-                        latestPE.PE_ratio || 
-                        latestPE.pe_ratio || 
-                        latestPE.PE || 
-                        latestPE.pe ||
-                        latestPE['本益比'] ||
-                        latestPE['PE'] ||
-                        0
-                    ) || null;
-                    if (pe && pe > 0) {
+                    console.log(`本益比可用欄位:`, Object.keys(latestPE));
+                    
+                    // 嘗試多種可能的欄位名稱（包括大小寫變體）
+                    const peValue = latestPE.PE_ratio || 
+                                   latestPE.pe_ratio || 
+                                   latestPE.PE || 
+                                   latestPE.pe ||
+                                   latestPE['本益比'] ||
+                                   latestPE['PE'] ||
+                                   latestPE['PEratio'] ||
+                                   latestPE['PERatio'] ||
+                                   latestPE['PER'] ||
+                                   latestPE['price_earnings_ratio'] ||
+                                   latestPE['priceEarningsRatio'] ||
+                                   latestPE.value ||
+                                   latestPE.Value ||
+                                   0;
+                    
+                    pe = parseFloat(peValue);
+                    if (pe && pe > 0 && !isNaN(pe)) {
                         console.log(`✅ 獲取本益比成功: ${stockCodePadded}, PE: ${pe}`);
                     } else {
-                        console.log(`⚠️ 本益比解析失敗，可用欄位:`, Object.keys(latestPE));
+                        console.log(`⚠️ 本益比解析失敗，原始值: ${peValue}, 類型: ${typeof peValue}`);
+                        // 嘗試從所有數值欄位中尋找
+                        for (const key of Object.keys(latestPE)) {
+                            const val = parseFloat(latestPE[key]);
+                            if (val && val > 0 && val < 1000 && !isNaN(val)) {
+                                console.log(`嘗試欄位 ${key}: ${val}`);
+                                pe = val;
+                                break;
+                            }
+                        }
                     }
                 } else {
                     console.log(`⚠️ 本益比 API 資料格式錯誤:`, peData);
@@ -513,21 +531,37 @@ async function fetchStockFinancials(ticker) {
                     // 計算平均股息率或取最新值
                     const latestDividend = dividendData.data[dividendData.data.length - 1];
                     console.log(`股息率資料範例:`, JSON.stringify(latestDividend));
+                    console.log(`股息率可用欄位:`, Object.keys(latestDividend));
+                    
                     // 嘗試多種可能的欄位名稱
-                    const dividend = parseFloat(
-                        latestDividend.DividendYield || 
-                        latestDividend.dividend_yield || 
-                        latestDividend.Dividend || 
-                        latestDividend.dividend ||
-                        latestDividend['殖利率'] ||
-                        latestDividend['股息率'] ||
-                        0
-                    ) || null;
-                    if (dividend && dividend > 0) {
+                    const dividendValue = latestDividend.DividendYield || 
+                                         latestDividend.dividend_yield || 
+                                         latestDividend.Dividend || 
+                                         latestDividend.dividend ||
+                                         latestDividend['殖利率'] ||
+                                         latestDividend['股息率'] ||
+                                         latestDividend['Yield'] ||
+                                         latestDividend['yield'] ||
+                                         latestDividend['dividendYield'] ||
+                                         latestDividend.value ||
+                                         latestDividend.Value ||
+                                         0;
+                    
+                    const dividend = parseFloat(dividendValue);
+                    if (dividend && dividend > 0 && !isNaN(dividend)) {
                         dividendYield = dividend;
                         console.log(`✅ 獲取股息率成功: ${stockCodePadded}, 股息率: ${dividendYield}`);
                     } else {
-                        console.log(`⚠️ 股息率解析失敗，可用欄位:`, Object.keys(latestDividend));
+                        console.log(`⚠️ 股息率解析失敗，原始值: ${dividendValue}, 類型: ${typeof dividendValue}`);
+                        // 嘗試從所有數值欄位中尋找（通常在 0-20% 之間）
+                        for (const key of Object.keys(latestDividend)) {
+                            const val = parseFloat(latestDividend[key]);
+                            if (val && val > 0 && val < 20 && !isNaN(val)) {
+                                console.log(`嘗試欄位 ${key}: ${val}`);
+                                dividendYield = val;
+                                break;
+                            }
+                        }
                     }
                 } else {
                     console.log(`⚠️ 股息率 API 資料格式錯誤:`, dividendData);
@@ -555,20 +589,36 @@ async function fetchStockFinancials(ticker) {
                     // 查找 PB ratio 欄位
                     const latestPB = pbData.data[pbData.data.length - 1];
                     console.log(`股價淨值比資料範例:`, JSON.stringify(latestPB));
+                    console.log(`股價淨值比可用欄位:`, Object.keys(latestPB));
+                    
                     // 嘗試多種可能的欄位名稱
-                    pb = parseFloat(
-                        latestPB.PB_ratio || 
-                        latestPB.pb_ratio || 
-                        latestPB.PB || 
-                        latestPB.pb ||
-                        latestPB.price_to_book ||
-                        latestPB['股價淨值比'] ||
-                        0
-                    ) || null;
-                    if (pb && pb > 0) {
+                    const pbValue = latestPB.PB_ratio || 
+                                   latestPB.pb_ratio || 
+                                   latestPB.PB || 
+                                   latestPB.pb ||
+                                   latestPB.price_to_book ||
+                                   latestPB['股價淨值比'] ||
+                                   latestPB['PBRatio'] ||
+                                   latestPB['pbRatio'] ||
+                                   latestPB['PBR'] ||
+                                   latestPB.value ||
+                                   latestPB.Value ||
+                                   0;
+                    
+                    pb = parseFloat(pbValue);
+                    if (pb && pb > 0 && !isNaN(pb)) {
                         console.log(`✅ 獲取股價淨值比成功: ${stockCodePadded}, PB: ${pb}`);
                     } else {
-                        console.log(`⚠️ 股價淨值比解析失敗，可用欄位:`, Object.keys(latestPB));
+                        console.log(`⚠️ 股價淨值比解析失敗，原始值: ${pbValue}, 類型: ${typeof pbValue}`);
+                        // 嘗試從所有數值欄位中尋找（通常在 0-10 之間）
+                        for (const key of Object.keys(latestPB)) {
+                            const val = parseFloat(latestPB[key]);
+                            if (val && val > 0 && val < 10 && !isNaN(val)) {
+                                console.log(`嘗試欄位 ${key}: ${val}`);
+                                pb = val;
+                                break;
+                            }
+                            }
                     }
                 } else {
                     console.log(`⚠️ 股價淨值比 API 資料格式錯誤:`, pbData);
