@@ -9,6 +9,11 @@ const PORT = process.env.PORT || 3000;
 const FINMIND_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJkYXRlIjoiMjAyNi0wMS0wNyAxODo1Njo0OSIsInVzZXJfaWQiOiJwb2xvMTM2NCIsImVtYWlsIjoicmlnaHQ4MDYyNkBob3RtYWlsLmNvbSIsImlwIjoiNDkuMTU5LjIwOS41OSJ9.WdjSDnee45a_EHlwd7GPAtYu8yNb58ysi4_BxWNRzr4';
 const FINMIND_API_BASE_URL = 'https://api.finmindtrade.com/api/v4/data';
 
+// 股票名稱快取
+let stockInfoCache = null;
+let stockInfoCacheTime = 0;
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 小時
+
 // 中間件
 app.use(cors());
 app.use(express.json());
@@ -145,6 +150,69 @@ function calculateTechnicalIndicators(history) {
         resistance: resistance,
         currentPrice: closes[closes.length - 1]
     };
+}
+
+// ========== 股票名稱搜尋函數 ==========
+async function getStockInfoList() {
+    // 檢查快取是否有效
+    if (stockInfoCache && (Date.now() - stockInfoCacheTime) < CACHE_DURATION) {
+        return stockInfoCache;
+    }
+    
+    try {
+        const url = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockInfo&token=${FINMIND_API_TOKEN}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`獲取股票列表失敗: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.status === 200 && data.data) {
+            stockInfoCache = data.data;
+            stockInfoCacheTime = Date.now();
+            console.log(`股票列表快取已更新，共 ${data.data.length} 筆`);
+            return data.data;
+        }
+        return [];
+    } catch (err) {
+        console.error('獲取股票列表失敗:', err.message);
+        return stockInfoCache || [];
+    }
+}
+
+// 根據名稱或代碼搜尋股票
+async function searchStock(query) {
+    const stockList = await getStockInfoList();
+    const searchTerm = query.trim().toUpperCase();
+    
+    // 先嘗試精確匹配代碼
+    let found = stockList.find(s => 
+        String(s.stock_id || '').trim().toUpperCase() === searchTerm
+    );
+    
+    if (found) {
+        return { code: found.stock_id, name: found.stock_name };
+    }
+    
+    // 嘗試精確匹配名稱
+    found = stockList.find(s => 
+        String(s.stock_name || '').trim() === query.trim()
+    );
+    
+    if (found) {
+        return { code: found.stock_id, name: found.stock_name };
+    }
+    
+    // 嘗試模糊匹配名稱（包含搜尋詞）
+    found = stockList.find(s => 
+        String(s.stock_name || '').includes(query.trim())
+    );
+    
+    if (found) {
+        return { code: found.stock_id, name: found.stock_name };
+    }
+    
+    return null;
 }
 
 // ========== FinMind API 調用函數 ==========
@@ -795,10 +863,10 @@ ${revenueInfo}
 // 分析股票 API
 app.post('/api/analyze', async (req, res) => {
     try {
-        const { ticker, apiKey } = req.body;
+        let { ticker, apiKey } = req.body;
         
         if (!ticker) {
-            return res.status(400).json({ error: '請提供股票代號' });
+            return res.status(400).json({ error: '請提供股票代號或名稱' });
         }
         
         if (!apiKey) {
@@ -807,8 +875,26 @@ app.post('/api/analyze', async (req, res) => {
         
         console.log(`開始分析股票: ${ticker}`);
         
+        // 判斷是否為純數字代碼，如果不是則搜尋股票名稱
+        let stockCode = ticker.trim();
+        let searchedName = null;
+        
+        if (!/^\d+$/.test(stockCode)) {
+            // 輸入不是純數字，嘗試搜尋股票名稱
+            console.log(`嘗試搜尋股票名稱: ${stockCode}`);
+            const searchResult = await searchStock(stockCode);
+            
+            if (searchResult) {
+                stockCode = searchResult.code;
+                searchedName = searchResult.name;
+                console.log(`找到股票: ${searchedName} (${stockCode})`);
+            } else {
+                return res.status(404).json({ error: `找不到股票「${ticker}」，請確認名稱或使用股票代碼` });
+            }
+        }
+        
         // 獲取股票數據
-        const stockData = await fetchStockData(ticker);
+        const stockData = await fetchStockData(stockCode);
         if (!stockData) {
             return res.status(404).json({ error: '找不到股票數據' });
         }
@@ -816,7 +902,7 @@ app.post('/api/analyze', async (req, res) => {
         console.log(`股票數據獲取成功: ${stockData.longName}`);
         
         // 獲取歷史數據
-        const history = await fetchStockHistory(ticker, 30);
+        const history = await fetchStockHistory(stockCode, 30);
         console.log(`歷史數據: ${history.length} 筆`);
         
         // 計算技術指標
@@ -849,7 +935,7 @@ app.post('/api/analyze', async (req, res) => {
         
         for (const style of styles) {
             console.log(`分析風格: ${style}`);
-            const analysis = await analyzeWithGemini(marketData, technicalIndicators, style, ticker, apiKey);
+            const analysis = await analyzeWithGemini(marketData, technicalIndicators, style, stockCode, apiKey);
             analyses.push(analysis);
         }
         
@@ -895,6 +981,38 @@ app.get('/api/history/:ticker', async (req, res) => {
         res.json(history);
     } catch (err) {
         console.error('獲取歷史數據錯誤:', err);
+        res.status(500).json({ error: err.message || '伺服器錯誤' });
+    }
+});
+
+// 股票搜尋 API
+app.get('/api/search', async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q || q.length < 1) {
+            return res.json([]);
+        }
+        
+        const stockList = await getStockInfoList();
+        const searchTerm = q.trim().toLowerCase();
+        
+        // 搜尋匹配的股票（最多返回 10 筆）
+        const results = stockList
+            .filter(s => {
+                const code = String(s.stock_id || '').toLowerCase();
+                const name = String(s.stock_name || '').toLowerCase();
+                return code.includes(searchTerm) || name.includes(searchTerm);
+            })
+            .slice(0, 10)
+            .map(s => ({
+                code: s.stock_id,
+                name: s.stock_name,
+                industry: s.industry_category || ''
+            }));
+        
+        res.json(results);
+    } catch (err) {
+        console.error('搜尋錯誤:', err);
         res.status(500).json({ error: err.message || '伺服器錯誤' });
     }
 });
