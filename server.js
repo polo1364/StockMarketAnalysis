@@ -242,6 +242,168 @@ async function fetchStockFinancials(ticker) {
     }
 }
 
+// ========== 新增：籌碼面數據 ==========
+
+// 獲取三大法人買賣超
+async function fetchInstitutionalInvestors(ticker, days = 10) {
+    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
+    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
+    
+    try {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - days * 2);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        const data = await fetchFromFinMind('TaiwanStockInstitutionalInvestorsBuySell', stockCode, startDateStr, endDateStr);
+        
+        if (!data || data.length === 0) return null;
+        
+        // 取最近的數據
+        const recent = data.slice(-days);
+        
+        // 計算累計買賣超
+        let foreignTotal = 0, investmentTrustTotal = 0, dealerTotal = 0;
+        
+        recent.forEach(item => {
+            // 外資
+            if (item.name === 'Foreign_Investor' || item.name === '外陸資買賣超股數(不含外資自營商)') {
+                foreignTotal += parseInt(item.buy) - parseInt(item.sell) || 0;
+            }
+            // 投信
+            if (item.name === 'Investment_Trust' || item.name === '投信買賣超股數') {
+                investmentTrustTotal += parseInt(item.buy) - parseInt(item.sell) || 0;
+            }
+            // 自營商
+            if (item.name === 'Dealer_self' || item.name === '自營商買賣超股數') {
+                dealerTotal += parseInt(item.buy) - parseInt(item.sell) || 0;
+            }
+        });
+        
+        // 取最新一天的數據
+        const latestDate = recent[recent.length - 1]?.date;
+        const latestData = recent.filter(item => item.date === latestDate);
+        
+        let foreignToday = 0, investmentTrustToday = 0, dealerToday = 0;
+        latestData.forEach(item => {
+            if (item.name === 'Foreign_Investor' || item.name?.includes('外')) {
+                foreignToday = parseInt(item.buy) - parseInt(item.sell) || 0;
+            }
+            if (item.name === 'Investment_Trust' || item.name?.includes('投信')) {
+                investmentTrustToday = parseInt(item.buy) - parseInt(item.sell) || 0;
+            }
+            if (item.name === 'Dealer_self' || item.name?.includes('自營')) {
+                dealerToday = parseInt(item.buy) - parseInt(item.sell) || 0;
+            }
+        });
+        
+        return {
+            foreign: { today: foreignToday, total: foreignTotal },
+            investmentTrust: { today: investmentTrustToday, total: investmentTrustTotal },
+            dealer: { today: dealerToday, total: dealerTotal },
+            totalToday: foreignToday + investmentTrustToday + dealerToday,
+            totalPeriod: foreignTotal + investmentTrustTotal + dealerTotal,
+            days: days
+        };
+    } catch (err) {
+        console.error('獲取三大法人買賣超失敗:', err.message);
+        return null;
+    }
+}
+
+// 獲取融資融券
+async function fetchMarginTrading(ticker, days = 10) {
+    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
+    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
+    
+    try {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - days * 2);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        const data = await fetchFromFinMind('TaiwanStockMarginPurchaseShortSale', stockCode, startDateStr, endDateStr);
+        
+        if (!data || data.length === 0) return null;
+        
+        const latest = data[data.length - 1];
+        const previous = data.length > 1 ? data[data.length - 2] : latest;
+        
+        // 融資餘額
+        const marginBalance = parseInt(latest.MarginPurchaseTodayBalance || latest.margin_purchase_today_balance || 0);
+        const marginChange = marginBalance - parseInt(previous.MarginPurchaseTodayBalance || previous.margin_purchase_today_balance || 0);
+        
+        // 融券餘額
+        const shortBalance = parseInt(latest.ShortSaleTodayBalance || latest.short_sale_today_balance || 0);
+        const shortChange = shortBalance - parseInt(previous.ShortSaleTodayBalance || previous.short_sale_today_balance || 0);
+        
+        // 券資比
+        const marginShortRatio = marginBalance > 0 ? ((shortBalance / marginBalance) * 100).toFixed(2) : 0;
+        
+        return {
+            marginBalance: marginBalance,
+            marginChange: marginChange,
+            shortBalance: shortBalance,
+            shortChange: shortChange,
+            marginShortRatio: parseFloat(marginShortRatio),
+            date: latest.date
+        };
+    } catch (err) {
+        console.error('獲取融資融券失敗:', err.message);
+        return null;
+    }
+}
+
+// 獲取月營收
+async function fetchMonthlyRevenue(ticker) {
+    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
+    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
+    
+    try {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setFullYear(endDate.getFullYear() - 2);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        const data = await fetchFromFinMind('TaiwanStockMonthRevenue', stockCode, startDateStr, endDateStr);
+        
+        if (!data || data.length === 0) return null;
+        
+        const latest = data[data.length - 1];
+        const lastYear = data.find(item => {
+            const latestDate = new Date(latest.date || latest.revenue_month);
+            const itemDate = new Date(item.date || item.revenue_month);
+            return itemDate.getFullYear() === latestDate.getFullYear() - 1 && 
+                   itemDate.getMonth() === latestDate.getMonth();
+        });
+        
+        const revenue = parseInt(latest.revenue || latest.Revenue || 0);
+        const lastYearRevenue = lastYear ? parseInt(lastYear.revenue || lastYear.Revenue || 0) : 0;
+        const yoyGrowth = lastYearRevenue > 0 ? ((revenue - lastYearRevenue) / lastYearRevenue * 100).toFixed(2) : null;
+        
+        // 計算近 3 個月平均
+        const recent3 = data.slice(-3);
+        const avg3Month = recent3.reduce((sum, item) => sum + parseInt(item.revenue || item.Revenue || 0), 0) / 3;
+        
+        return {
+            revenue: revenue,
+            revenueDate: latest.date || latest.revenue_month,
+            yoyGrowth: yoyGrowth ? parseFloat(yoyGrowth) : null,
+            avg3MonthRevenue: Math.round(avg3Month),
+            isGrowing: yoyGrowth > 0
+        };
+    } catch (err) {
+        console.error('獲取月營收失敗:', err.message);
+        return null;
+    }
+}
+
 async function fetchStockHistory(ticker, days = 30) {
     // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
     const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
@@ -387,6 +549,13 @@ async function fetchStockData(ticker) {
             console.error('計算52週最高/最低失敗:', err.message);
         }
         
+        // 獲取籌碼面數據（並行請求提高效率）
+        const [institutionalData, marginData, revenueData] = await Promise.all([
+            fetchInstitutionalInvestors(ticker, 10).catch(() => null),
+            fetchMarginTrading(ticker, 10).catch(() => null),
+            fetchMonthlyRevenue(ticker).catch(() => null)
+        ]);
+        
         return {
             longName: stockName,
             shortName: stockCode,
@@ -401,7 +570,11 @@ async function fetchStockData(ticker) {
             regularMarketDayHigh: highestPrice,
             regularMarketDayLow: lowestPrice,
             fiftyTwoWeekHigh: fiftyTwoWeekHigh,
-            fiftyTwoWeekLow: fiftyTwoWeekLow
+            fiftyTwoWeekLow: fiftyTwoWeekLow,
+            // 新增籌碼面數據
+            institutional: institutionalData,
+            margin: marginData,
+            revenue: revenueData
         };
     } catch (err) {
         console.error('獲取股票數據失敗:', err);
@@ -430,6 +603,44 @@ async function analyzeWithGemini(marketData, technicalIndicators, style, ticker,
 `;
         }
         
+        // 籌碼面資訊
+        let chipInfo = '';
+        if (marketData.institutional) {
+            const inst = marketData.institutional;
+            chipInfo += `
+【籌碼面分析 - 三大法人】
+- 外資：今日 ${inst.foreign?.today?.toLocaleString() || 0} 股，近${inst.days}日累計 ${inst.foreign?.total?.toLocaleString() || 0} 股
+- 投信：今日 ${inst.investmentTrust?.today?.toLocaleString() || 0} 股，近${inst.days}日累計 ${inst.investmentTrust?.total?.toLocaleString() || 0} 股
+- 自營商：今日 ${inst.dealer?.today?.toLocaleString() || 0} 股，近${inst.days}日累計 ${inst.dealer?.total?.toLocaleString() || 0} 股
+- 三大法人合計：今日 ${inst.totalToday?.toLocaleString() || 0} 股，近${inst.days}日累計 ${inst.totalPeriod?.toLocaleString() || 0} 股
+- 法人動向判斷：${inst.totalPeriod > 0 ? '買超（偏多）' : inst.totalPeriod < 0 ? '賣超（偏空）' : '中性'}
+`;
+        }
+        
+        if (marketData.margin) {
+            const margin = marketData.margin;
+            chipInfo += `
+【籌碼面分析 - 融資融券】
+- 融資餘額：${margin.marginBalance?.toLocaleString() || 0} 張（較前日 ${margin.marginChange >= 0 ? '+' : ''}${margin.marginChange?.toLocaleString() || 0}）
+- 融券餘額：${margin.shortBalance?.toLocaleString() || 0} 張（較前日 ${margin.shortChange >= 0 ? '+' : ''}${margin.shortChange?.toLocaleString() || 0}）
+- 券資比：${margin.marginShortRatio || 0}%
+- 散戶情緒：${margin.marginChange > 0 ? '融資增加（散戶追多）' : margin.marginChange < 0 ? '融資減少（散戶減碼）' : '持平'}
+`;
+        }
+        
+        // 營收資訊
+        let revenueInfo = '';
+        if (marketData.revenue) {
+            const rev = marketData.revenue;
+            revenueInfo = `
+【基本面 - 月營收】
+- 最新營收：${(rev.revenue / 100000000).toFixed(2)} 億元（${rev.revenueDate}）
+- 年增率 (YoY)：${rev.yoyGrowth !== null ? (rev.yoyGrowth >= 0 ? '+' : '') + rev.yoyGrowth + '%' : 'N/A'}
+- 近3月平均營收：${(rev.avg3MonthRevenue / 100000000).toFixed(2)} 億元
+- 成長趨勢：${rev.isGrowing ? '📈 成長中' : '📉 衰退中'}
+`;
+        }
+        
         const prompt = `
 你是一位資深專業的股票分析師，擁有20年以上的投資經驗，請使用繁體中文進行深度分析（專業術語如 PE、ROE、EPS、RSI、MACD 等可保留英文縮寫）。
 
@@ -454,6 +665,8 @@ async function analyzeWithGemini(marketData, technicalIndicators, style, ticker,
 52週最低: ${marketData.fiftyTwoWeekLow}
 
 ${technicalInfo}
+${chipInfo}
+${revenueInfo}
 
 【分析要求】
 請以 JSON 格式回覆，所有內容都使用繁體中文（專業術語可保留英文縮寫），包含以下欄位：
@@ -609,7 +822,7 @@ app.post('/api/analyze', async (req, res) => {
         // 計算技術指標
         const technicalIndicators = calculateTechnicalIndicators(history);
         
-        // 準備市場數據
+        // 準備市場數據（包含籌碼面和營收）
         const marketData = {
             name: stockData.longName,
             price: stockData.regularMarketPrice,
@@ -623,7 +836,11 @@ app.post('/api/analyze', async (req, res) => {
             dayHigh: stockData.regularMarketDayHigh,
             dayLow: stockData.regularMarketDayLow,
             fiftyTwoWeekHigh: stockData.fiftyTwoWeekHigh,
-            fiftyTwoWeekLow: stockData.fiftyTwoWeekLow
+            fiftyTwoWeekLow: stockData.fiftyTwoWeekLow,
+            // 新增籌碼面數據
+            institutional: stockData.institutional,
+            margin: stockData.margin,
+            revenue: stockData.revenue
         };
         
         // 執行 AI 分析（四種風格）

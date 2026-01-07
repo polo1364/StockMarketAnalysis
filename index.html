@@ -292,6 +292,90 @@
                 </div>
             </div>
 
+            <!-- 籌碼面數據 -->
+            <div id="chip-data-section" class="card-base rounded-2xl overflow-hidden animate-fade-in hidden">
+                <div class="p-6 border-b border-slate-700/50 bg-gradient-to-r from-orange-900/20 to-transparent">
+                    <h3 class="text-orange-400 font-bold text-lg mb-4 flex items-center gap-2.5">
+                        <i class="fa-solid fa-users"></i> 
+                        <span>籌碼面分析</span>
+                    </h3>
+                    
+                    <!-- 三大法人 -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i class="fa-solid fa-globe text-blue-400"></i>
+                                <span class="text-slate-300 font-medium">外資</span>
+                            </div>
+                            <p id="chip-foreign-today" class="text-xl font-bold text-white">--</p>
+                            <p id="chip-foreign-total" class="text-xs text-slate-400 mt-1">近10日累計: --</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i class="fa-solid fa-building-columns text-green-400"></i>
+                                <span class="text-slate-300 font-medium">投信</span>
+                            </div>
+                            <p id="chip-trust-today" class="text-xl font-bold text-white">--</p>
+                            <p id="chip-trust-total" class="text-xs text-slate-400 mt-1">近10日累計: --</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i class="fa-solid fa-landmark text-purple-400"></i>
+                                <span class="text-slate-300 font-medium">自營商</span>
+                            </div>
+                            <p id="chip-dealer-today" class="text-xl font-bold text-white">--</p>
+                            <p id="chip-dealer-total" class="text-xs text-slate-400 mt-1">近10日累計: --</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 融資融券 -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">融資餘額</p>
+                            <p id="chip-margin-balance" class="text-lg font-bold text-red-400">--</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">融資增減</p>
+                            <p id="chip-margin-change" class="text-lg font-bold text-white">--</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">融券餘額</p>
+                            <p id="chip-short-balance" class="text-lg font-bold text-green-400">--</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">券資比</p>
+                            <p id="chip-ratio" class="text-lg font-bold text-yellow-400">--</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 月營收 -->
+                <div class="p-6 bg-gradient-to-r from-emerald-900/20 to-transparent">
+                    <h3 class="text-emerald-400 font-bold text-lg mb-4 flex items-center gap-2.5">
+                        <i class="fa-solid fa-chart-line"></i> 
+                        <span>月營收</span>
+                    </h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">最新營收</p>
+                            <p id="revenue-latest" class="text-lg font-bold text-white">--</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">年增率 (YoY)</p>
+                            <p id="revenue-yoy" class="text-lg font-bold text-white">--</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">近3月平均</p>
+                            <p id="revenue-avg3m" class="text-lg font-bold text-white">--</p>
+                        </div>
+                        <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                            <p class="text-xs text-slate-400 mb-1">成長趨勢</p>
+                            <p id="revenue-trend" class="text-lg font-bold text-white">--</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 技術線圖和交易量圖表 -->
             <div class="card-base rounded-2xl overflow-hidden animate-fade-in">
                 <div class="p-6 border-b border-slate-700/50 bg-gradient-to-r from-slate-800/50 to-transparent">
@@ -841,7 +925,11 @@
                         fiftyTwoWeekHigh: result.marketData.fiftyTwoWeekHigh,
                         fiftyTwoWeekLow: result.marketData.fiftyTwoWeekLow,
                         isDemo: false,
-                        isETF: isETF  // 標記是否為 ETF
+                        isETF: isETF,  // 標記是否為 ETF
+                        // 籌碼面數據
+                        institutional: result.marketData.institutional,
+                        margin: result.marketData.margin,
+                        revenue: result.marketData.revenue
                     },
                     technical_indicators: result.technicalIndicators,
                     analyses: result.analyses.map((analysis, i) => ({
@@ -953,6 +1041,77 @@
             document.getElementById('metric-low').innerText = m.dayLow > 0 ? m.dayLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
             document.getElementById('metric-52w-high').innerText = m.fiftyTwoWeekHigh > 0 ? m.fiftyTwoWeekHigh.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
             document.getElementById('metric-52w-low').innerText = m.fiftyTwoWeekLow > 0 ? m.fiftyTwoWeekLow.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A';
+
+            // --- B. 填寫籌碼面數據 ---
+            const chipSection = document.getElementById('chip-data-section');
+            if (m.institutional || m.margin || m.revenue) {
+                chipSection.classList.remove('hidden');
+                
+                // 三大法人
+                if (m.institutional) {
+                    const inst = m.institutional;
+                    const formatNum = (n) => {
+                        if (!n) return '--';
+                        const absN = Math.abs(n);
+                        const sign = n >= 0 ? '+' : '';
+                        if (absN >= 1000000) return sign + (n / 1000000).toFixed(2) + 'M';
+                        if (absN >= 1000) return sign + (n / 1000).toFixed(1) + 'K';
+                        return sign + n.toLocaleString();
+                    };
+                    
+                    const foreignTodayEl = document.getElementById('chip-foreign-today');
+                    foreignTodayEl.innerText = formatNum(inst.foreign?.today);
+                    foreignTodayEl.className = `text-xl font-bold ${inst.foreign?.today >= 0 ? 'text-red-400' : 'text-green-400'}`;
+                    document.getElementById('chip-foreign-total').innerText = `近${inst.days}日: ${formatNum(inst.foreign?.total)}`;
+                    
+                    const trustTodayEl = document.getElementById('chip-trust-today');
+                    trustTodayEl.innerText = formatNum(inst.investmentTrust?.today);
+                    trustTodayEl.className = `text-xl font-bold ${inst.investmentTrust?.today >= 0 ? 'text-red-400' : 'text-green-400'}`;
+                    document.getElementById('chip-trust-total').innerText = `近${inst.days}日: ${formatNum(inst.investmentTrust?.total)}`;
+                    
+                    const dealerTodayEl = document.getElementById('chip-dealer-today');
+                    dealerTodayEl.innerText = formatNum(inst.dealer?.today);
+                    dealerTodayEl.className = `text-xl font-bold ${inst.dealer?.today >= 0 ? 'text-red-400' : 'text-green-400'}`;
+                    document.getElementById('chip-dealer-total').innerText = `近${inst.days}日: ${formatNum(inst.dealer?.total)}`;
+                }
+                
+                // 融資融券
+                if (m.margin) {
+                    const margin = m.margin;
+                    document.getElementById('chip-margin-balance').innerText = margin.marginBalance ? (margin.marginBalance / 1000).toFixed(1) + 'K張' : '--';
+                    
+                    const marginChangeEl = document.getElementById('chip-margin-change');
+                    const marginChange = margin.marginChange || 0;
+                    marginChangeEl.innerText = (marginChange >= 0 ? '+' : '') + marginChange.toLocaleString();
+                    marginChangeEl.className = `text-lg font-bold ${marginChange >= 0 ? 'text-red-400' : 'text-green-400'}`;
+                    
+                    document.getElementById('chip-short-balance').innerText = margin.shortBalance ? (margin.shortBalance / 1000).toFixed(1) + 'K張' : '--';
+                    document.getElementById('chip-ratio').innerText = margin.marginShortRatio ? margin.marginShortRatio + '%' : '--';
+                }
+                
+                // 月營收
+                if (m.revenue) {
+                    const rev = m.revenue;
+                    document.getElementById('revenue-latest').innerText = rev.revenue ? (rev.revenue / 100000000).toFixed(2) + '億' : '--';
+                    
+                    const yoyEl = document.getElementById('revenue-yoy');
+                    if (rev.yoyGrowth !== null) {
+                        yoyEl.innerText = (rev.yoyGrowth >= 0 ? '+' : '') + rev.yoyGrowth + '%';
+                        yoyEl.className = `text-lg font-bold ${rev.yoyGrowth >= 0 ? 'text-red-400' : 'text-green-400'}`;
+                    } else {
+                        yoyEl.innerText = 'N/A';
+                        yoyEl.className = 'text-lg font-bold text-slate-400';
+                    }
+                    
+                    document.getElementById('revenue-avg3m').innerText = rev.avg3MonthRevenue ? (rev.avg3MonthRevenue / 100000000).toFixed(2) + '億' : '--';
+                    
+                    const trendEl = document.getElementById('revenue-trend');
+                    trendEl.innerText = rev.isGrowing ? '📈 成長' : '📉 衰退';
+                    trendEl.className = `text-lg font-bold ${rev.isGrowing ? 'text-red-400' : 'text-green-400'}`;
+                }
+            } else {
+                chipSection.classList.add('hidden');
+            }
 
             // 處理漲跌顏色
             const changeStr = m.change || "0%";
