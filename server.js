@@ -571,10 +571,11 @@ async function fetchStockFinancials(ticker) {
             console.error(`獲取股息率失敗:`, err.message);
         }
         
-        // 3. 獲取股價淨值比 (TaiwanStockFinancialRatio 或從股價和淨值計算)
+        // 3. 獲取股價淨值比 (嘗試多個資料集)
+        // 方法 1: 嘗試 TaiwanStockFinancialRatio
         try {
             const pbUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockFinancialRatio&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
-            console.log(`嘗試獲取股價淨值比: ${stockCodePadded}`);
+            console.log(`嘗試獲取股價淨值比 (方法1): ${stockCodePadded}`);
             
             const pbResponse = await httpRequest(pbUrl, {
                 headers: {
@@ -618,14 +619,52 @@ async function fetchStockFinancials(ticker) {
                                 pb = val;
                                 break;
                             }
-                            }
+                        }
                     }
                 } else {
                     console.log(`⚠️ 股價淨值比 API 資料格式錯誤:`, pbData);
                 }
             }
         } catch (err) {
-            console.error(`獲取股價淨值比失敗:`, err.message);
+            console.error(`獲取股價淨值比失敗 (方法1):`, err.message);
+        }
+        
+        // 方法 2: 如果方法1失敗，嘗試從 TaiwanStockPER 獲取（可能同時包含 PB）
+        if (!pb || pb <= 0) {
+            try {
+                const pbUrl2 = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPER&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+                console.log(`嘗試獲取股價淨值比 (方法2 - 從PER資料集): ${stockCodePadded}`);
+                
+                const pbResponse2 = await httpRequest(pbUrl2, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (pbResponse2.ok) {
+                    const pbData2 = await pbResponse2.json();
+                    if (pbData2.status === 200 && pbData2.data && Array.isArray(pbData2.data) && pbData2.data.length > 0) {
+                        const latestPB2 = pbData2.data[pbData2.data.length - 1];
+                        console.log(`PER資料集可用欄位:`, Object.keys(latestPB2));
+                        
+                        // 嘗試從 PER 資料集中尋找 PB 相關欄位
+                        const pbValue2 = latestPB2.PB_ratio || 
+                                        latestPB2.pb_ratio || 
+                                        latestPB2.PB || 
+                                        latestPB2.pb ||
+                                        latestPB2.price_to_book ||
+                                        latestPB2['股價淨值比'] ||
+                                        0;
+                        
+                        pb = parseFloat(pbValue2);
+                        if (pb && pb > 0 && !isNaN(pb)) {
+                            console.log(`✅ 從PER資料集獲取股價淨值比成功: ${stockCodePadded}, PB: ${pb}`);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`獲取股價淨值比失敗 (方法2):`, err.message);
+            }
         }
         
         console.log(`✅ 財務指標獲取完成: ${stockCodePadded}, PE: ${pe}, 股息率: ${dividendYield}, PB: ${pb}`);
@@ -1216,9 +1255,9 @@ ${technicalInfo}
 10. **請快速回應，保持內容精簡但專業**
 `;
 
-        // 设置 Gemini API 超时（40秒，給每個風格更多時間）
+        // 设置 Gemini API 超时（60秒，給每個風格更多時間，避免超時）
         const geminiTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Gemini API 超时')), 40000)
+            setTimeout(() => reject(new Error('Gemini API 超时')), 60000)
         );
         
         const result = await Promise.race([
