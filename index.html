@@ -818,15 +818,21 @@
                 const result = await response.json();
                 console.log('後端返回數據:', result);
                 
+                // 判斷是否為 ETF（代碼以 0 開頭，如 0050、0056、00940）
+                const isETF = /^0/.test(ticker);
+                const etfNote = 'ETF不適用';
+                
                 // 構建返回數據格式
                 const data = {
                     market_data: {
                         name: result.marketData.name,
                         price: result.marketData.price,
                         change: result.marketData.change,
-                        pe: result.marketData.pe ? result.marketData.pe.toFixed(2) : 'N/A',
+                        // ETF 通常沒有本益比，顯示「ETF不適用」
+                        pe: result.marketData.pe ? result.marketData.pe.toFixed(2) : (isETF ? etfNote : 'N/A'),
                         dividendYield: result.marketData.dividendYield ? result.marketData.dividendYield.toFixed(2) : 'N/A',
-                        pb: result.marketData.pb ? result.marketData.pb.toFixed(2) : 'N/A',
+                        // ETF 通常沒有股價淨值比，顯示「ETF不適用」
+                        pb: result.marketData.pb ? result.marketData.pb.toFixed(2) : (isETF ? etfNote : 'N/A'),
                         marketCap: result.marketData.marketCap || 0,
                         volume: result.marketData.volume,
                         previousClose: result.marketData.previousClose,
@@ -834,7 +840,8 @@
                         dayLow: result.marketData.dayLow,
                         fiftyTwoWeekHigh: result.marketData.fiftyTwoWeekHigh,
                         fiftyTwoWeekLow: result.marketData.fiftyTwoWeekLow,
-                        isDemo: false
+                        isDemo: false,
+                        isETF: isETF  // 標記是否為 ETF
                     },
                     technical_indicators: result.technicalIndicators,
                     analyses: result.analyses.map((analysis, i) => ({
@@ -910,16 +917,34 @@
             // --- A. 填寫市場數據 ---
             document.getElementById('stock-name').innerText = m.name;
             document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
-            document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+            // 處理 ETF 的本益比顯示
+            if (m.isETF && m.pe === 'ETF不適用') {
+                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">ETF</span>`;
+            } else {
+                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+            }
             
             if (m.isDemo) {
                 document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
             
-            // 填寫財務指標
-            document.getElementById('metric-pe').innerText = m.pe;
+            // 填寫財務指標（ETF 顯示特殊樣式）
+            const peEl = document.getElementById('metric-pe');
+            const pbEl = document.getElementById('metric-pb');
+            
+            if (m.pe === 'ETF不適用') {
+                peEl.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else {
+                peEl.innerText = m.pe;
+            }
+            
             document.getElementById('metric-dividend').innerText = m.dividendYield !== 'N/A' ? `${m.dividendYield}%` : 'N/A';
-            document.getElementById('metric-pb').innerText = m.pb;
+            
+            if (m.pb === 'ETF不適用') {
+                pbEl.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else {
+                pbEl.innerText = m.pb;
+            }
             document.getElementById('metric-volume').innerText = m.volume > 0 ? (m.volume >= 1000000 ? `${(m.volume / 1000000).toFixed(2)}M` : m.volume >= 1000 ? `${(m.volume / 1000).toFixed(1)}K` : m.volume.toLocaleString()) : 'N/A';
             
             // 填寫價格區間
@@ -1357,17 +1382,35 @@
             updateSavedStockName(m.name);
             // 處理小數點顯示
             document.getElementById('stock-price').innerText = m.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
-            document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+            // 處理 ETF 的本益比顯示
+            if (m.isETF && m.pe === 'ETF不適用') {
+                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs text-slate-500"></i> <span class="text-slate-400 text-xs">ETF</span>`;
+            } else {
+                document.getElementById('stock-pe').innerHTML = `<i class="fa-solid fa-chart-pie text-xs"></i> <span>本益比: ${m.pe}</span>`;
+            }
             
             // 如果是演示數據，顯示提示
             if (m.isDemo) {
                 document.getElementById('stock-pe').innerHTML = `<span class="text-yellow-500">⚠️ 演示數據</span>`;
             }
             
-            // 填寫財務指標
-            document.getElementById('metric-pe').innerText = m.pe;
+            // 填寫財務指標（ETF 顯示特殊樣式）
+            const peEl2 = document.getElementById('metric-pe');
+            if (m.pe === 'ETF不適用') {
+                peEl2.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else {
+                peEl2.innerText = m.pe;
+            }
             document.getElementById('metric-dividend').innerText = m.dividendYield !== 'N/A' ? `${m.dividendYield}%` : 'N/A';
-            document.getElementById('metric-pb').innerText = m.pb;
+            
+            // PB 處理（ETF 顯示特殊樣式）
+            const pbEl2 = document.getElementById('metric-pb');
+            if (m.pb === 'ETF不適用') {
+                pbEl2.innerHTML = `<span class="text-slate-500 text-sm">ETF不適用</span>`;
+            } else {
+                pbEl2.innerText = m.pb;
+            }
+            
             document.getElementById('metric-volume').innerText = m.volume > 0 ? (m.volume >= 1000000 ? `${(m.volume / 1000000).toFixed(2)}M` : m.volume >= 1000 ? `${(m.volume / 1000).toFixed(1)}K` : m.volume.toLocaleString()) : 'N/A';
             
             // 填寫價格區間
