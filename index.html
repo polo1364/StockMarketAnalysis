@@ -605,6 +605,14 @@
                     resultsEl.classList.remove('hidden');
                     countEl.textContent = data.count;
                     
+                    // 顯示抽樣說明
+                    if (data.note) {
+                        const noteEl = document.createElement('p');
+                        noteEl.className = 'text-xs text-slate-500 mb-3';
+                        noteEl.innerHTML = `<i class="fa-solid fa-circle-info"></i> ${data.note}（已檢查 ${data.checked || '?'} 支）`;
+                        listEl.parentElement.insertBefore(noteEl, listEl);
+                    }
+                    
                     // 渲染股票列表
                     listEl.innerHTML = data.stocks.map(stock => `
                         <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-orange-500/50 transition-all cursor-pointer group"
@@ -620,15 +628,19 @@
                             </div>
                             <div class="text-right">
                                 <p class="text-lg font-bold ${stock.price < 5 ? 'text-red-400' : 'text-orange-400'}">$${stock.price.toFixed(2)}</p>
-                                <div class="flex gap-2 text-xs text-slate-500 justify-end">
-                                    <span title="本益比">PE:${stock.pe || 'N/A'}</span>
-                                    <span title="殖利率">${stock.dividendYield || 'N/A'}</span>
-                                </div>
+                                <p class="text-xs text-slate-500">${stock.volume ? formatVolume(stock.volume) : ''}</p>
                             </div>
                         </div>
                     `).join('');
                 } else {
                     emptyEl.classList.remove('hidden');
+                    // 顯示更詳細的空結果訊息
+                    emptyEl.innerHTML = `
+                        <i class="fa-solid fa-search text-4xl text-slate-600 mb-3"></i>
+                        <p class="text-slate-400">在抽樣的 ${data.checked || '?'} 支股票中</p>
+                        <p class="text-slate-400">沒有找到股價低於 ${maxPrice} 元的股票</p>
+                        <p class="text-slate-500 text-xs mt-2">請嘗試提高價格上限或重新搜尋</p>
+                    `;
                 }
             } catch (error) {
                 console.error('篩選錯誤:', error);

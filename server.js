@@ -985,7 +985,7 @@ app.get('/api/history/:ticker', async (req, res) => {
     }
 });
 
-// 低價股篩選 API（逐一查詢方式）
+// 低價股篩選 API（使用 TaiwanStockPrice 逐一查詢）
 app.get('/api/filter/low-price', async (req, res) => {
     try {
         const maxPrice = parseFloat(req.query.max) || 10;
@@ -1005,20 +1005,21 @@ app.get('/api/filter/low-price', async (req, res) => {
         console.log(`共有 ${validStocks.length} 支股票待篩選`);
         
         // 隨機取樣一部分股票進行查詢（避免 API 限制）
-        const sampleSize = Math.min(200, validStocks.length);
+        const sampleSize = Math.min(300, validStocks.length);
         const sampledStocks = validStocks
             .sort(() => Math.random() - 0.5)
             .slice(0, sampleSize);
         
         const endDate = new Date();
         const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 3);
+        startDate.setDate(endDate.getDate() - 10); // 擴大日期範圍
         
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
         
         const lowPriceStocks = [];
-        const batchSize = 10; // 每批查詢數量
+        const batchSize = 15; // 每批查詢數量
+        let checkedCount = 0;
         
         // 分批查詢
         for (let i = 0; i < sampledStocks.length && lowPriceStocks.length < limit; i += batchSize) {
@@ -1026,7 +1027,8 @@ app.get('/api/filter/low-price', async (req, res) => {
             
             const promises = batch.map(async (stock) => {
                 try {
-                    const url = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPER&data_id=${stock.stock_id}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+                    // 使用 TaiwanStockPrice 獲取價格
+                    const url = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPrice&data_id=${stock.stock_id}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
                     
                     const response = await fetch(url);
                     if (!response.ok) return null;
@@ -1036,16 +1038,16 @@ app.get('/api/filter/low-price', async (req, res) => {
                     
                     // 取最新一筆
                     const latest = data.data[data.data.length - 1];
-                    const price = parseFloat(latest.close || 0);
+                    // 嘗試多種欄位名稱
+                    const price = parseFloat(latest.close || latest.Close || latest.收盤價 || 0);
+                    const volume = parseInt(latest.Trading_Volume || latest.trading_volume || latest.成交股數 || 0);
                     
-                    if (price > 0 && price <= maxPrice) {
+                    if (price > 0 && price <= maxPrice && volume > 0) {
                         return {
                             code: stock.stock_id,
                             name: stock.stock_name || stock.stock_id,
                             price: price,
-                            pe: latest.PER ? parseFloat(latest.PER).toFixed(2) : 'N/A',
-                            pb: latest.PBR ? parseFloat(latest.PBR).toFixed(2) : 'N/A',
-                            dividendYield: latest.dividend_yield ? parseFloat(latest.dividend_yield).toFixed(2) + '%' : 'N/A',
+                            volume: volume,
                             industry: stock.industry_category || '未分類'
                         };
                     }
@@ -1060,22 +1062,26 @@ app.get('/api/filter/low-price', async (req, res) => {
                 if (r) lowPriceStocks.push(r);
             });
             
+            checkedCount += batch.length;
+            console.log(`已檢查 ${checkedCount}/${sampleSize} 支，找到 ${lowPriceStocks.length} 支低價股`);
+            
             // 如果已經找到足夠數量，提前結束
             if (lowPriceStocks.length >= limit) break;
             
             // 小延遲避免 API 限制
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
         
         // 按價格排序
         lowPriceStocks.sort((a, b) => a.price - b.price);
         
-        console.log(`找到 ${lowPriceStocks.length} 支股價低於 ${maxPrice} 元的股票`);
+        console.log(`最終找到 ${lowPriceStocks.length} 支股價低於 ${maxPrice} 元的股票`);
         
         res.json({
             count: lowPriceStocks.length,
             maxPrice: maxPrice,
             stocks: lowPriceStocks.slice(0, limit),
+            checked: checkedCount,
             note: '結果為抽樣篩選，可能未包含所有低價股'
         });
         
