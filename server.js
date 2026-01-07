@@ -467,11 +467,28 @@ async function fetchStockFinancials(ticker) {
             
             if (peResponse.ok) {
                 const peData = await peResponse.json();
+                console.log(`本益比 API 回應:`, JSON.stringify(peData).substring(0, 500));
                 if (peData.status === 200 && peData.data && Array.isArray(peData.data) && peData.data.length > 0) {
                     // 取最新的本益比資料
                     const latestPE = peData.data[peData.data.length - 1];
-                    pe = parseFloat(latestPE.PE_ratio || latestPE.pe_ratio || latestPE.PE || 0) || null;
-                    console.log(`✅ 獲取本益比成功: ${stockCodePadded}, PE: ${pe}`);
+                    console.log(`本益比資料範例:`, JSON.stringify(latestPE));
+                    // 嘗試多種可能的欄位名稱
+                    pe = parseFloat(
+                        latestPE.PE_ratio || 
+                        latestPE.pe_ratio || 
+                        latestPE.PE || 
+                        latestPE.pe ||
+                        latestPE['本益比'] ||
+                        latestPE['PE'] ||
+                        0
+                    ) || null;
+                    if (pe && pe > 0) {
+                        console.log(`✅ 獲取本益比成功: ${stockCodePadded}, PE: ${pe}`);
+                    } else {
+                        console.log(`⚠️ 本益比解析失敗，可用欄位:`, Object.keys(latestPE));
+                    }
+                } else {
+                    console.log(`⚠️ 本益比 API 資料格式錯誤:`, peData);
                 }
             }
         } catch (err) {
@@ -491,16 +508,29 @@ async function fetchStockFinancials(ticker) {
             
             if (dividendResponse.ok) {
                 const dividendData = await dividendResponse.json();
+                console.log(`股息率 API 回應:`, JSON.stringify(dividendData).substring(0, 500));
                 if (dividendData.status === 200 && dividendData.data && Array.isArray(dividendData.data) && dividendData.data.length > 0) {
                     // 計算平均股息率或取最新值
                     const latestDividend = dividendData.data[dividendData.data.length - 1];
-                    const dividend = parseFloat(latestDividend.Dividend || latestDividend.dividend || latestDividend.DividendYield || latestDividend.dividend_yield || 0) || null;
-                    // 如果有股價，計算股息率
+                    console.log(`股息率資料範例:`, JSON.stringify(latestDividend));
+                    // 嘗試多種可能的欄位名稱
+                    const dividend = parseFloat(
+                        latestDividend.DividendYield || 
+                        latestDividend.dividend_yield || 
+                        latestDividend.Dividend || 
+                        latestDividend.dividend ||
+                        latestDividend['殖利率'] ||
+                        latestDividend['股息率'] ||
+                        0
+                    ) || null;
                     if (dividend && dividend > 0) {
-                        // 需要股價來計算股息率，這裡先返回原始值
                         dividendYield = dividend;
+                        console.log(`✅ 獲取股息率成功: ${stockCodePadded}, 股息率: ${dividendYield}`);
+                    } else {
+                        console.log(`⚠️ 股息率解析失敗，可用欄位:`, Object.keys(latestDividend));
                     }
-                    console.log(`✅ 獲取股息率成功: ${stockCodePadded}, 股息率: ${dividendYield}`);
+                } else {
+                    console.log(`⚠️ 股息率 API 資料格式錯誤:`, dividendData);
                 }
             }
         } catch (err) {
@@ -520,11 +550,28 @@ async function fetchStockFinancials(ticker) {
             
             if (pbResponse.ok) {
                 const pbData = await pbResponse.json();
+                console.log(`股價淨值比 API 回應:`, JSON.stringify(pbData).substring(0, 500));
                 if (pbData.status === 200 && pbData.data && Array.isArray(pbData.data) && pbData.data.length > 0) {
                     // 查找 PB ratio 欄位
                     const latestPB = pbData.data[pbData.data.length - 1];
-                    pb = parseFloat(latestPB.PB_ratio || latestPB.pb_ratio || latestPB.PB || latestPB.price_to_book || 0) || null;
-                    console.log(`✅ 獲取股價淨值比成功: ${stockCodePadded}, PB: ${pb}`);
+                    console.log(`股價淨值比資料範例:`, JSON.stringify(latestPB));
+                    // 嘗試多種可能的欄位名稱
+                    pb = parseFloat(
+                        latestPB.PB_ratio || 
+                        latestPB.pb_ratio || 
+                        latestPB.PB || 
+                        latestPB.pb ||
+                        latestPB.price_to_book ||
+                        latestPB['股價淨值比'] ||
+                        0
+                    ) || null;
+                    if (pb && pb > 0) {
+                        console.log(`✅ 獲取股價淨值比成功: ${stockCodePadded}, PB: ${pb}`);
+                    } else {
+                        console.log(`⚠️ 股價淨值比解析失敗，可用欄位:`, Object.keys(latestPB));
+                    }
+                } else {
+                    console.log(`⚠️ 股價淨值比 API 資料格式錯誤:`, pbData);
                 }
             }
         } catch (err) {
@@ -913,7 +960,8 @@ app.get('/api/routes', (req, res) => {
 });
 
 // 请求超时处理（Railway 可能有超时限制）
-const REQUEST_TIMEOUT = 35000; // 35 秒（Railway 网关超时通常是 60 秒，但留出更多缓冲）
+// 改為 180 秒（3分鐘），因為串行處理 4 個風格需要更多時間
+const REQUEST_TIMEOUT = 180000; // 180 秒（Railway 网关超时通常是 60 秒，但留出更多缓冲）
 
 // --- API 端点：分析股票 ---
 app.post('/api/analyze', async (req, res) => {
@@ -1037,8 +1085,8 @@ app.post('/api/analyze', async (req, res) => {
         const currentDate = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         
-        // 并行分析所有风格
-        const analysisPromises = analysisStyles.map(async (currentStyle) => {
+        // 創建分析函數（不立即執行）
+        const analyzeStyle = async (currentStyle) => {
             try {
                 console.log(`正在分析風格: ${currentStyle}`);
                 
@@ -1118,9 +1166,9 @@ ${technicalInfo}
 10. **請快速回應，保持內容精簡但專業**
 `;
 
-        // 设置 Gemini API 超时（25秒，确保在总超时前完成）
+        // 设置 Gemini API 超时（40秒，給每個風格更多時間）
         const geminiTimeout = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Gemini API 超时')), 25000)
+            setTimeout(() => reject(new Error('Gemini API 超时')), 40000)
         );
         
         const result = await Promise.race([
@@ -1259,21 +1307,25 @@ ${technicalInfo}
                     catalyst: "N/A"
                 };
             }
-        });
+        };
 
         // --- 3. 使用已获取的历史数据（用于图表，避免重复请求以加快速度） ---
         const chartHistory = stockHistory || [];
         
-        // --- 4. 等待所有分析完成（使用 Promise.allSettled 以避免一个失败导致全部失败）---
-        const analysisResults = await Promise.allSettled(analysisPromises);
-        const analyses = analysisResults.map((result, index) => {
-            if (result.status === 'fulfilled') {
-                return result.value;
-            } else {
-                console.error(`分析風格 ${analysisStyles[index]} 失敗:`, result.reason);
-                return {
+        // --- 4. 串行處理所有風格分析（避免並發過多導致超時）---
+        console.log(`開始串行處理 ${analysisStyles.length} 個風格的分析...`);
+        const analyses = [];
+        for (let i = 0; i < analysisStyles.length; i++) {
+            try {
+                console.log(`處理風格 ${i + 1}/${analysisStyles.length}: ${analysisStyles[i]}`);
+                const result = await analyzeStyle(analysisStyles[i]);
+                analyses.push(result);
+                console.log(`✅ 風格 ${analysisStyles[i]} 分析完成`);
+            } catch (err) {
+                console.error(`風格 ${analysisStyles[i]} 分析失敗:`, err.message);
+                analyses.push({
                     summary: "分析暫時無法取得，請稍後再試。",
-                    analysis: `分析失敗: ${result.reason?.message || '未知錯誤'}`,
+                    analysis: `分析失敗: ${err.message || '未知錯誤'}`,
                     action: "持有",
                     risk_level: "中",
                     target_price: "N/A",
@@ -1285,9 +1337,9 @@ ${technicalInfo}
                     key_levels: {},
                     industry_comparison: "N/A",
                     catalyst: "N/A"
-                };
+                });
             }
-        });
+        }
         
         // --- 5. 返回結果 ---
         clearTimeoutSafe();
