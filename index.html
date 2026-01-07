@@ -163,6 +163,13 @@
                 <span class="hidden sm:inline">儲存</span>
             </button>
             
+            <button onclick="openLowPriceFilter()" id="filter-btn" 
+                class="bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white px-5 py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-orange-600/20 whitespace-nowrap flex items-center justify-center gap-2 hover:scale-105" 
+                title="篩選低價股">
+                <i class="fa-solid fa-filter"></i>
+                <span class="hidden sm:inline">低價股</span>
+            </button>
+            
             <button onclick="analyzeStock()" id="analyze-btn" 
                 class="btn-primary text-white px-6 py-3.5 rounded-xl font-bold shadow-lg shadow-blue-600/30 whitespace-nowrap flex items-center justify-center gap-2">
                 <span>AI 分析</span> 
@@ -467,12 +474,169 @@
 
     </main>
 
+    <!-- 低價股篩選彈窗 -->
+    <div id="low-price-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden border border-slate-700 shadow-2xl">
+            <!-- 標題列 -->
+            <div class="p-5 border-b border-slate-700 bg-gradient-to-r from-orange-900/30 to-transparent flex items-center justify-between">
+                <h2 class="text-xl font-bold text-orange-400 flex items-center gap-3">
+                    <i class="fa-solid fa-filter"></i>
+                    低價股篩選
+                </h2>
+                <button onclick="closeLowPriceFilter()" class="text-slate-400 hover:text-white transition-colors p-2 hover:bg-slate-800 rounded-lg">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- 篩選條件 -->
+            <div class="p-5 border-b border-slate-700 bg-slate-800/50">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label class="text-slate-300 text-sm">股價低於</label>
+                        <input type="number" id="filter-max-price" value="10" min="1" max="100" step="1" 
+                            class="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center focus:border-orange-500 focus:outline-none">
+                        <span class="text-slate-300 text-sm">元</span>
+                    </div>
+                    <button onclick="fetchLowPriceStocks()" id="filter-search-btn"
+                        class="bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white px-5 py-2 rounded-lg font-semibold transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-search"></i>
+                        搜尋
+                    </button>
+                </div>
+                <p class="text-xs text-slate-500 mt-3">
+                    <i class="fa-solid fa-circle-info"></i> 
+                    篩選條件：上市/上櫃股票、有成交量、非權證/ETN
+                </p>
+            </div>
+            
+            <!-- 結果列表 -->
+            <div class="p-5 overflow-y-auto max-h-[50vh]">
+                <div id="filter-loading" class="hidden py-10 text-center">
+                    <div class="inline-block w-10 h-10 border-3 border-slate-700 border-t-orange-500 rounded-full animate-spin mb-3"></div>
+                    <p class="text-slate-400 text-sm">正在篩選股票...</p>
+                </div>
+                
+                <div id="filter-results" class="hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="text-sm text-slate-400">
+                            找到 <span id="filter-count" class="text-orange-400 font-bold">0</span> 支符合條件的股票
+                        </p>
+                    </div>
+                    
+                    <div id="filter-stock-list" class="space-y-2">
+                        <!-- 股票列表會動態插入這裡 -->
+                    </div>
+                </div>
+                
+                <div id="filter-empty" class="hidden py-10 text-center">
+                    <i class="fa-solid fa-face-sad-tear text-4xl text-slate-600 mb-3"></i>
+                    <p class="text-slate-400">沒有找到符合條件的股票</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 使用後端 API 獲取 FinMind 數據
         
         // ========== 後端 API 配置 ==========
         // 後端伺服器會處理 FinMind API 調用，避免 CORS 問題
         const API_BASE_URL = window.location.origin;
+
+        // ========== 低價股篩選功能 ==========
+        function openLowPriceFilter() {
+            document.getElementById('low-price-modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeLowPriceFilter() {
+            document.getElementById('low-price-modal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        
+        // 點擊背景關閉
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('low-price-modal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeLowPriceFilter();
+                    }
+                });
+            }
+        });
+        
+        async function fetchLowPriceStocks() {
+            const maxPrice = document.getElementById('filter-max-price').value || 10;
+            const loadingEl = document.getElementById('filter-loading');
+            const resultsEl = document.getElementById('filter-results');
+            const emptyEl = document.getElementById('filter-empty');
+            const listEl = document.getElementById('filter-stock-list');
+            const countEl = document.getElementById('filter-count');
+            const searchBtn = document.getElementById('filter-search-btn');
+            
+            // 顯示載入中
+            loadingEl.classList.remove('hidden');
+            resultsEl.classList.add('hidden');
+            emptyEl.classList.add('hidden');
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 搜尋中...';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/filter/low-price?max=${maxPrice}&limit=50`);
+                const data = await response.json();
+                
+                loadingEl.classList.add('hidden');
+                
+                if (data.stocks && data.stocks.length > 0) {
+                    resultsEl.classList.remove('hidden');
+                    countEl.textContent = data.count;
+                    
+                    // 渲染股票列表
+                    listEl.innerHTML = data.stocks.map(stock => `
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-orange-500/50 transition-all cursor-pointer group"
+                             onclick="selectFilteredStock('${stock.code}')">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                                    <span class="text-orange-400 font-bold text-sm">${stock.code}</span>
+                                </div>
+                                <div>
+                                    <p class="text-white font-medium group-hover:text-orange-400 transition-colors">${stock.name}</p>
+                                    <p class="text-xs text-slate-500">${stock.industry}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-lg font-bold ${stock.price < 5 ? 'text-red-400' : 'text-orange-400'}">$${stock.price.toFixed(2)}</p>
+                                <p class="text-xs text-slate-500">${formatVolume(stock.volume)}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    emptyEl.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('篩選錯誤:', error);
+                loadingEl.classList.add('hidden');
+                emptyEl.classList.remove('hidden');
+                alert('篩選失敗，請稍後再試');
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = '<i class="fa-solid fa-search"></i> 搜尋';
+            }
+        }
+        
+        function formatVolume(volume) {
+            if (volume >= 100000000) return (volume / 100000000).toFixed(2) + '億';
+            if (volume >= 10000) return (volume / 10000).toFixed(1) + '萬';
+            if (volume >= 1000) return (volume / 1000).toFixed(1) + 'K';
+            return volume.toLocaleString();
+        }
+        
+        function selectFilteredStock(code) {
+            document.getElementById('ticker-input').value = code;
+            closeLowPriceFilter();
+            analyzeStock();
+        }
 
         // ========== 技術指標計算函數（前端用於圖表顯示）==========
         function calculateMA(data, period) {

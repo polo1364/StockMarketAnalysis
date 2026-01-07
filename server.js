@@ -985,6 +985,93 @@ app.get('/api/history/:ticker', async (req, res) => {
     }
 });
 
+// 低價股篩選 API
+app.get('/api/filter/low-price', async (req, res) => {
+    try {
+        const maxPrice = parseFloat(req.query.max) || 10;
+        const limit = parseInt(req.query.limit) || 30;
+        
+        console.log(`篩選股價低於 ${maxPrice} 元的股票...`);
+        
+        // 獲取股票列表
+        const stockList = await getStockInfoList();
+        
+        // 過濾出上市/上櫃股票（排除權證、ETN等）
+        const validStocks = stockList.filter(s => {
+            const type = String(s.type || '').toLowerCase();
+            const code = String(s.stock_id || '');
+            // 只保留一般股票（4位數代碼，排除權證等）
+            return code.length === 4 && /^\d{4}$/.test(code);
+        });
+        
+        // 獲取今天和30天前的日期
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 7);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        // 批量獲取股價（使用 TaiwanStockPrice 不帶 data_id 獲取全部）
+        const url = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPrice&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('獲取股價資料失敗');
+        }
+        
+        const data = await response.json();
+        if (data.status !== 200 || !data.data) {
+            throw new Error('股價資料格式錯誤');
+        }
+        
+        // 取每支股票最新價格
+        const priceMap = new Map();
+        data.data.forEach(item => {
+            const code = item.stock_id;
+            const price = parseFloat(item.close);
+            const date = item.date;
+            
+            if (!priceMap.has(code) || priceMap.get(code).date < date) {
+                priceMap.set(code, { price, date, volume: parseInt(item.Trading_Volume || 0) });
+            }
+        });
+        
+        // 篩選低價股
+        const lowPriceStocks = [];
+        
+        for (const stock of validStocks) {
+            const code = stock.stock_id;
+            const priceInfo = priceMap.get(code);
+            
+            if (priceInfo && priceInfo.price > 0 && priceInfo.price <= maxPrice && priceInfo.volume > 0) {
+                lowPriceStocks.push({
+                    code: code,
+                    name: stock.stock_name,
+                    price: priceInfo.price,
+                    volume: priceInfo.volume,
+                    industry: stock.industry_category || '未分類'
+                });
+            }
+        }
+        
+        // 按價格排序
+        lowPriceStocks.sort((a, b) => a.price - b.price);
+        
+        console.log(`找到 ${lowPriceStocks.length} 支股價低於 ${maxPrice} 元的股票`);
+        
+        res.json({
+            count: lowPriceStocks.length,
+            maxPrice: maxPrice,
+            stocks: lowPriceStocks.slice(0, limit)
+        });
+        
+    } catch (err) {
+        console.error('篩選低價股錯誤:', err);
+        res.status(500).json({ error: err.message || '伺服器錯誤' });
+    }
+});
+
 // 股票搜尋 API
 app.get('/api/search', async (req, res) => {
     try {
