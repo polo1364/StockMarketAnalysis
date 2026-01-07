@@ -32,6 +32,10 @@ console.log('yahoo-finance2 初始化完成');
 console.log('类型:', typeof yahooFinance);
 console.log('可用方法:', Object.keys(yahooFinance || {}));
 
+// FinMind API 配置
+const FINMIND_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJkYXRlIjoiMjAyNi0wMS0wNyAxODo1Njo0OSIsInVzZXJfaWQiOiJwb2xvMTM2NCIsImVtYWlsIjoicmlnaHQ4MDYyNkBob3RtYWlsLmNvbSIsImlwIjoiNDkuMTU5LjIwOS41OSJ9.WdjSDnee45a_EHlwd7GPAtYu8yNb58ysi4_BxWNRzr4';
+const FINMIND_API_BASE_URL = 'https://api.finmindtrade.com/api/v4/data';
+
 // HTTP 请求辅助函数（优先使用 fetch，axios 作为备用）
 async function httpRequest(url, options = {}) {
     // 优先尝试原生 fetch（在 Railway 上可能更可靠）
@@ -330,139 +334,98 @@ async function fetchStockHistory(ticker, days = 30) {
             }
         }
         
-        // 使用 TWSE API 获取历史数据（普通股票）
-        // TWSE STOCK_DAY API 需要指定日期，格式：YYYYMMDD
-        const today = new Date();
-        let allHistory = [];
+        // 使用 FinMind API 获取历史数据（普通股票）
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - days * 2); // 多取一些數據以確保有足夠的交易日
         
-        // 尝试获取最近3个月的数据（每个月尝试多个日期，因为可能遇到非交易日）
-        for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
-            const targetDate = new Date(today);
-            targetDate.setMonth(targetDate.getMonth() - monthOffset);
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        try {
+            console.log(`嘗試獲取歷史數據: ${stockCodePadded}, 日期範圍: ${startDateStr} 到 ${endDateStr}`);
+            const historyUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPrice&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
             
-            // 尝试该月的多个日期（1号、15号、最后一天）
-            const datesToTry = [];
-            datesToTry.push(`${targetDate.getFullYear()}${String(targetDate.getMonth() + 1).padStart(2, '0')}01`);
-            datesToTry.push(`${targetDate.getFullYear()}${String(targetDate.getMonth() + 1).padStart(2, '0')}15`);
+            const response = await httpRequest(historyUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
             
-            // 获取该月最后一天
-            const lastDay = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-            datesToTry.push(`${lastDay.getFullYear()}${String(lastDay.getMonth() + 1).padStart(2, '0')}${String(lastDay.getDate()).padStart(2, '0')}`);
-            
-            for (const monthDate of datesToTry) {
-                try {
-                    console.log(`尝试获取历史数据: ${stockCodePadded}, 日期: ${monthDate}`);
-                    const twseUrl = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${monthDate}&stockNo=${stockCodePadded}`;
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.status === 200 && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                    console.log(`✅ 獲取到 ${data.data.length} 條歷史數據記錄`);
                     
-                    const response = await httpRequest(twseUrl, {
-                        headers: {
-                            'Accept': 'application/json'
+                    // 解析 FinMind 返回的數據格式
+                    const allHistory = data.data.map(item => {
+                        try {
+                            const date = new Date(item.date || item.Date);
+                            // 轉換為民國年格式：113/12/25
+                            const rocYear = date.getFullYear() - 1911;
+                            const dateStr = `${rocYear}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+                            
+                            const close = parseFloat(item.close || item.Close || 0) || 0;
+                            const open = parseFloat(item.open || item.Open || close) || close;
+                            const high = parseFloat(item.max || item.Max || item.high || item.High || close) || close;
+                            const low = parseFloat(item.min || item.Min || item.low || item.Low || close) || close;
+                            const volume = parseInt(item.Trading_Volume || item.trading_volume || item.volume || 0) || 0;
+                            
+                            return {
+                                date: dateStr,
+                                volume: volume,
+                                amount: 0,
+                                open: open,
+                                high: high,
+                                low: low,
+                                close: close,
+                                change: 0, // FinMind 可能沒有直接提供漲跌價差
+                                transactions: 0
+                            };
+                        } catch (e) {
+                            console.error(`解析歷史數據項失敗:`, item, e);
+                            return null;
+                        }
+                    }).filter(item => item !== null && item.close > 0);
+                    
+                    // 計算漲跌價差
+                    for (let i = 1; i < allHistory.length; i++) {
+                        allHistory[i].change = allHistory[i].close - allHistory[i - 1].close;
+                    }
+                    
+                    // 按日期排序（從舊到新）
+                    allHistory.sort((a, b) => {
+                        try {
+                            const dateA = a.date.split('/').map(Number);
+                            const dateB = b.date.split('/').map(Number);
+                            const yearA = dateA[0] + 1911;
+                            const yearB = dateB[0] + 1911;
+                            if (yearA !== yearB) return yearA - yearB;
+                            if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
+                            return dateA[2] - dateB[2];
+                        } catch (e) {
+                            return 0;
                         }
                     });
                     
-                    if (response.ok) {
-                        const data = await response.json();
-                        console.log(`历史数据 API 响应: ${monthDate}, 状态: ${data.stat || 'unknown'}, 消息: ${data.msg || 'N/A'}`);
-                        
-                        // 检查 API 返回状态
-                        if (data.stat && data.stat !== 'OK') {
-                            console.log(`API 返回错误状态: ${data.stat}, 消息: ${data.msg || 'N/A'}`);
-                            continue;
-                        }
-                        
-                        if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
-                            console.log(`✅ 获取到 ${data.data.length} 条历史数据记录`);
-                            
-                            // 解析 TWSE 返回的数据格式
-                            // 格式: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
-                            const monthHistory = data.data.map(item => {
-                                try {
-                                    if (!item || !Array.isArray(item) || item.length < 7) {
-                                        return null;
-                                    }
-                                    
-                                    return {
-                                        date: item[0],
-                                        volume: parseInt(String(item[1] || '0').replace(/,/g, '')) || 0,
-                                        amount: parseFloat(String(item[2] || '0').replace(/,/g, '')) || 0,
-                                        open: parseFloat(String(item[3] || '0').replace(/,/g, '')) || 0,
-                                        high: parseFloat(String(item[4] || '0').replace(/,/g, '')) || 0,
-                                        low: parseFloat(String(item[5] || '0').replace(/,/g, '')) || 0,
-                                        close: parseFloat(String(item[6] || '0').replace(/,/g, '')) || 0,
-                                        change: parseFloat(String(item[7] || '0').replace(/,/g, '')) || 0,
-                                        transactions: parseInt(String(item[8] || '0').replace(/,/g, '')) || 0
-                                    };
-                                } catch (e) {
-                                    console.error(`解析历史数据项失败:`, item, e);
-                                    return null;
-                                }
-                            }).filter(item => item !== null && item.date);
-                            
-                            // 过滤掉交易量为0的数据（可能是休市日），但保留价格数据
-                            const validHistory = monthHistory.filter(item => item.close > 0);
-                            console.log(`有效历史数据: ${validHistory.length} 条（过滤后，原始: ${monthHistory.length} 条）`);
-                            
-                            // 合并数据，避免重复
-                            for (const item of validHistory) {
-                                if (!allHistory.find(h => h.date === item.date)) {
-                                    allHistory.push(item);
-                                }
-                            }
-                            
-                            // 如果已经获取足够的数据，就停止
-                            if (allHistory.length >= days) {
-                                console.log(`已获取足够的历史数据: ${allHistory.length} 条`);
-                                break;
-                            }
-                            
-                            // 如果这个日期成功获取到数据，就不需要尝试该月的其他日期了
-                            if (validHistory.length > 0) {
-                                break;
-                            }
-                        } else {
-                            console.log(`月份 ${monthDate} 没有数据或数据格式错误`);
-                        }
+                    // 只取最近 N 個交易日
+                    const recentHistory = allHistory.slice(-days);
+                    
+                    if (recentHistory.length > 0) {
+                        console.log(`✅ 獲取歷史數據成功: ${stockCodePadded}, 共 ${recentHistory.length} 個交易日`);
+                        return recentHistory;
                     } else {
-                        console.log(`历史数据 API 返回状态码: ${response.status}`);
-                        const errorText = await response.text().catch(() => '');
-                        console.log(`错误响应: ${errorText.substring(0, 200)}`);
+                        console.log(`⚠️ 無法獲取歷史數據: ${stockCodePadded}, 數據為空`);
                     }
-                } catch (err) {
-                    console.error(`获取 ${monthDate} 的数据失败:`, err.message);
-                    continue;
+                } else {
+                    console.log(`⚠️ FinMind API 返回的數據格式錯誤或為空`);
                 }
+            } else {
+                console.log(`⚠️ FinMind API 返回狀態碼: ${response.status}`);
             }
-            
-            // 如果已经获取足够的数据，就停止
-            if (allHistory.length >= days) {
-                break;
-            }
-        }
-        
-        // 按日期排序（从旧到新）
-        allHistory.sort((a, b) => {
-            try {
-                const dateA = a.date.split('/').map(Number);
-                const dateB = b.date.split('/').map(Number);
-                // 民国年转西元年比较
-                const yearA = dateA[0] + 1911;
-                const yearB = dateB[0] + 1911;
-                if (yearA !== yearB) return yearA - yearB;
-                if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
-                return dateA[2] - dateB[2];
-            } catch (e) {
-                return 0;
-            }
-        });
-        
-        // 只取最近 N 个交易日
-        allHistory = allHistory.slice(-days);
-        
-        if (allHistory.length > 0) {
-            console.log(`✅ 获取历史数据成功: ${stockCodePadded}, 共 ${allHistory.length} 个交易日`);
-            return allHistory;
-        } else {
-            console.log(`⚠️ 无法获取历史数据: ${stockCodePadded}, 所有尝试都失败`);
+        } catch (err) {
+            console.error(`獲取歷史數據失敗:`, err.message);
         }
     } catch (err) {
         console.error(`获取历史数据失败:`, err.message);
@@ -473,158 +436,216 @@ async function fetchStockHistory(ticker, days = 30) {
     return [];
 }
 
-// 获取股票财务指标的函数（本益比、股息率、股價淨值比等）
+// 获取股票财务指标的函数（本益比、股息率、股價淨值比等）- 使用 FinMind API
 async function fetchStockFinancials(ticker) {
     const stockCode = ticker.replace(/^0+/, '');
     const stockCodePadded = stockCode.padStart(4, '0');
     
     try {
-        // TWSE 本益比、殖利率及股價淨值比 API
-        // API: https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL
-        const peUrl = `https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL`;
+        // 計算日期範圍（最近一年）
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setFullYear(endDate.getFullYear() - 1);
         
-        console.log(`尝试获取本益比: ${stockCodePadded}, URL: ${peUrl}`);
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
         
-        const peResponse = await httpRequest(peUrl, {
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
+        let pe = null;
+        let dividendYield = null;
+        let pb = null;
         
-        if (peResponse.ok) {
-            const peData = await peResponse.json();
-            console.log(`本益比 API 返回数据，类型: ${Array.isArray(peData) ? '数组' : typeof peData}, 长度: ${Array.isArray(peData) ? peData.length : 'N/A'}`);
+        // 1. 獲取本益比 (TaiwanStockPER)
+        try {
+            const peUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPER&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+            console.log(`嘗試獲取本益比: ${stockCodePadded}, URL: ${peUrl.substring(0, 100)}...`);
             
-            if (Array.isArray(peData) && peData.length > 0) {
-                // 查看第一个数据项的字段结构（用于调试）
-                if (peData[0]) {
-                    console.log(`本益比 API 数据示例字段:`, Object.keys(peData[0]));
+            const peResponse = await httpRequest(peUrl, {
+                headers: {
+                    'Accept': 'application/json'
                 }
-                
-                // 查找匹配的股票（支持多种格式，包括 ETF）
-                const stockPE = peData.find(s => {
-                    const code = String(s.Code || s.代號 || '').trim();
-                    // 尝试多种格式匹配（包括带前导零的格式）
-                    return code === stockCodePadded || 
-                           code === stockCode || 
-                           code === ticker.padStart(4, '0') ||
-                           code === ticker.padStart(5, '0') ||
-                           code === ticker ||
-                           (ticker.length === 5 && code === ticker.substring(1)); // ETF: 00940 -> 0940
-                });
-                
-                if (stockPE) {
-                    console.log(`找到股票财务指标数据:`, stockPE);
-                    
-                    // 解析各种财务指标
-                    const pe = parseFloat(String(stockPE.PEratio || stockPE.PE || 0).replace(/,/g, '')) || null;
-                    const dividendYield = parseFloat(String(stockPE.DividendYield || stockPE['殖利率'] || 0).replace(/,/g, '')) || null;
-                    const pb = parseFloat(String(stockPE.PBratio || stockPE.PB || stockPE['股價淨值比'] || 0).replace(/,/g, '')) || null;
-                    
-                    console.log(`✅ 获取财务指标成功: ${stockCodePadded}, PE: ${pe}, 股息率: ${dividendYield}, PB: ${pb}`);
-                    
-                    return {
-                        pe: pe && pe > 0 ? pe : null,
-                        dividendYield: dividendYield && dividendYield > 0 ? dividendYield : null,
-                        pb: pb && pb > 0 ? pb : null
-                    };
-                } else {
-                    console.log(`⚠️ 未找到股票代码 ${stockCodePadded} 的财务指标数据`);
+            });
+            
+            if (peResponse.ok) {
+                const peData = await peResponse.json();
+                if (peData.status === 200 && peData.data && Array.isArray(peData.data) && peData.data.length > 0) {
+                    // 取最新的本益比資料
+                    const latestPE = peData.data[peData.data.length - 1];
+                    pe = parseFloat(latestPE.PE_ratio || latestPE.pe_ratio || latestPE.PE || 0) || null;
+                    console.log(`✅ 獲取本益比成功: ${stockCodePadded}, PE: ${pe}`);
                 }
-            } else {
-                console.log(`⚠️ 本益比 API 返回的数据不是数组或为空`);
             }
-        } else {
-            console.log(`⚠️ 本益比 API 返回状态码: ${peResponse.status}`);
+        } catch (err) {
+            console.error(`獲取本益比失敗:`, err.message);
         }
+        
+        // 2. 獲取股息率 (TaiwanStockDividend)
+        try {
+            const dividendUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockDividend&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+            console.log(`嘗試獲取股息率: ${stockCodePadded}`);
+            
+            const dividendResponse = await httpRequest(dividendUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (dividendResponse.ok) {
+                const dividendData = await dividendResponse.json();
+                if (dividendData.status === 200 && dividendData.data && Array.isArray(dividendData.data) && dividendData.data.length > 0) {
+                    // 計算平均股息率或取最新值
+                    const latestDividend = dividendData.data[dividendData.data.length - 1];
+                    const dividend = parseFloat(latestDividend.Dividend || latestDividend.dividend || latestDividend.DividendYield || latestDividend.dividend_yield || 0) || null;
+                    // 如果有股價，計算股息率
+                    if (dividend && dividend > 0) {
+                        // 需要股價來計算股息率，這裡先返回原始值
+                        dividendYield = dividend;
+                    }
+                    console.log(`✅ 獲取股息率成功: ${stockCodePadded}, 股息率: ${dividendYield}`);
+                }
+            }
+        } catch (err) {
+            console.error(`獲取股息率失敗:`, err.message);
+        }
+        
+        // 3. 獲取股價淨值比 (TaiwanStockFinancialRatio 或從股價和淨值計算)
+        try {
+            const pbUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockFinancialRatio&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+            console.log(`嘗試獲取股價淨值比: ${stockCodePadded}`);
+            
+            const pbResponse = await httpRequest(pbUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (pbResponse.ok) {
+                const pbData = await pbResponse.json();
+                if (pbData.status === 200 && pbData.data && Array.isArray(pbData.data) && pbData.data.length > 0) {
+                    // 查找 PB ratio 欄位
+                    const latestPB = pbData.data[pbData.data.length - 1];
+                    pb = parseFloat(latestPB.PB_ratio || latestPB.pb_ratio || latestPB.PB || latestPB.price_to_book || 0) || null;
+                    console.log(`✅ 獲取股價淨值比成功: ${stockCodePadded}, PB: ${pb}`);
+                }
+            }
+        } catch (err) {
+            console.error(`獲取股價淨值比失敗:`, err.message);
+        }
+        
+        console.log(`✅ 財務指標獲取完成: ${stockCodePadded}, PE: ${pe}, 股息率: ${dividendYield}, PB: ${pb}`);
+        
+        return {
+            pe: pe && pe > 0 ? pe : null,
+            dividendYield: dividendYield && dividendYield > 0 ? dividendYield : null,
+            pb: pb && pb > 0 ? pb : null
+        };
     } catch (err) {
-        console.error(`获取本益比失败:`, err.message);
-        console.error(`错误堆栈:`, err.stack);
+        console.error(`獲取財務指標失敗:`, err.message);
+        console.error(`錯誤堆棧:`, err.stack);
     }
     
     return { pe: null, dividendYield: null, pb: null };
 }
 
-// 获取股票数据的函数（使用多种数据源）
+// 获取股票数据的函数（使用 FinMind API）
 async function fetchStockData(ticker) {
     // 处理台股代号（支持4位和5位数字）
-    const stockCode = ticker.replace(/^0+/, ''); // 移除前导零，TWSE API 不需要前导零
+    const stockCode = ticker.replace(/^0+/, ''); // 移除前导零
     const stockCodePadded = stockCode.padStart(4, '0'); // 补齐到4位
     
-    // 方案 1: 使用台湾证券交易所 OpenAPI（官方 API，最可靠）
-    let peRatio = null;
-    
+    // 方案 1: 使用 FinMind API 获取股票数据
     try {
-        console.log(`尝试 TWSE OpenAPI: ${stockCodePadded}`);
+        console.log(`嘗試 FinMind API: ${stockCodePadded}`);
         
-        // TWSE 即時報價 API
-        const twseUrl = `https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL`;
+        // 計算日期範圍（最近30天）
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 30);
         
-        const twseResponse = await httpRequest(twseUrl, {
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        // 獲取股價資料 (TaiwanStockPrice)
+        const priceUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockPrice&data_id=${stockCodePadded}&start_date=${startDateStr}&end_date=${endDateStr}&token=${FINMIND_API_TOKEN}`;
+        
+        const priceResponse = await httpRequest(priceUrl, {
             headers: {
                 'Accept': 'application/json'
             }
         });
         
-        if (twseResponse.ok) {
-            const twseData = await twseResponse.json();
-            console.log(`TWSE API 返回数据，共 ${Array.isArray(twseData) ? twseData.length : 0} 只股票`);
+        if (priceResponse.ok) {
+            const priceData = await priceResponse.json();
             
-            // 查找匹配的股票（支持多种格式：4位数字、带前导零等）
-            const stock = Array.isArray(twseData) ? twseData.find(s => {
-                const code = String(s.Code || '').trim();
-                return code === stockCodePadded || 
-                       code === stockCode || 
-                       code === ticker.padStart(4, '0');
-            }) : null;
-            
-            if (stock) {
-                console.log(`✅ TWSE API 成功: ${stock.Code} (${stock.Name}), 价格: ${stock.ClosingPrice}`);
+            if (priceData.status === 200 && priceData.data && Array.isArray(priceData.data) && priceData.data.length > 0) {
+                // 取最新的股價資料
+                const latestPrice = priceData.data[priceData.data.length - 1];
+                const previousPrice = priceData.data.length > 1 ? priceData.data[priceData.data.length - 2] : latestPrice;
                 
-                // 解析价格数据（TWSE API 返回的可能是字符串，需要移除千分位逗号）
-                const closingPrice = parseFloat(String(stock.ClosingPrice || 0).replace(/,/g, '')) || 0;
-                const previousClose = parseFloat(String(stock.PreviousClosingPrice || stock.ClosingPrice || 0).replace(/,/g, '')) || closingPrice;
+                const closingPrice = parseFloat(latestPrice.close || latestPrice.Close || 0) || 0;
+                const previousClose = parseFloat(previousPrice.close || previousPrice.Close || closingPrice) || closingPrice;
+                const volume = parseInt(latestPrice.Trading_Volume || latestPrice.trading_volume || latestPrice.volume || 0) || 0;
+                const highestPrice = parseFloat(latestPrice.max || latestPrice.Max || latestPrice.high || latestPrice.High || closingPrice) || closingPrice;
+                const lowestPrice = parseFloat(latestPrice.min || latestPrice.Min || latestPrice.low || latestPrice.Low || closingPrice) || closingPrice;
                 
-                // 解析成交量（移除千分位逗号）
-                const volume = parseInt(String(stock.TradeVolume || 0).replace(/,/g, '')) || 0;
-                
-                // 检查是否是交易日：如果成交量为0或价格异常，可能是休市日
+                // 檢查是否是交易日
                 const isTradingDay = volume > 0 && closingPrice > 0;
                 
                 if (!isTradingDay) {
-                    console.log(`⚠️ 今日可能休市或数据异常: 成交量=${volume}, 价格=${closingPrice}`);
+                    console.log(`⚠️ 今日可能休市或數據異常: 成交量=${volume}, 價格=${closingPrice}`);
                 }
                 
                 const changePercent = previousClose > 0 && isTradingDay
                     ? ((closingPrice - previousClose) / previousClose * 100)
                     : 0;
                 
-                const highestPrice = parseFloat(String(stock.HighestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
-                const lowestPrice = parseFloat(String(stock.LowestPrice || closingPrice).replace(/,/g, '')) || closingPrice;
+                // 獲取股票名稱 (TaiwanStockInfo)
+                let stockName = ticker;
+                try {
+                    const infoUrl = `${FINMIND_API_BASE_URL}?dataset=TaiwanStockInfo&data_id=${stockCodePadded}&token=${FINMIND_API_TOKEN}`;
+                    const infoResponse = await httpRequest(infoUrl, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (infoResponse.ok) {
+                        const infoData = await infoResponse.json();
+                        if (infoData.status === 200 && infoData.data && Array.isArray(infoData.data) && infoData.data.length > 0) {
+                            const stockInfo = infoData.data.find(s => 
+                                String(s.stock_id || s.stock_id || '').trim() === stockCodePadded
+                            ) || infoData.data[0];
+                            stockName = stockInfo.stock_name || stockInfo.name || stockInfo.stock_id || ticker;
+                        }
+                    }
+                } catch (err) {
+                    console.error(`獲取股票名稱失敗:`, err.message);
+                }
                 
-                // 尝试获取财务指标（本益比、股息率、PB等）
+                // 獲取財務指標（本益比、股息率、PB等）
                 const financials = await fetchStockFinancials(ticker);
                 
-                // 获取历史数据来计算 52 週最高/最低（获取过去一年的数据）
+                // 獲取歷史數據來計算 52 週最高/最低
                 let fiftyTwoWeekHigh = null;
                 let fiftyTwoWeekLow = null;
                 try {
-                    const yearHistory = await fetchStockHistory(ticker, 365); // 获取过去一年的数据
+                    const yearHistory = await fetchStockHistory(ticker, 365);
                     if (yearHistory && yearHistory.length > 0) {
                         const prices = yearHistory.map(h => h.close).filter(p => p > 0);
                         if (prices.length > 0) {
                             fiftyTwoWeekHigh = Math.max(...prices);
                             fiftyTwoWeekLow = Math.min(...prices);
-                            console.log(`✅ 从历史数据计算 52 週最高/最低: 最高=${fiftyTwoWeekHigh}, 最低=${fiftyTwoWeekLow}`);
+                            console.log(`✅ 從歷史數據計算 52 週最高/最低: 最高=${fiftyTwoWeekHigh}, 最低=${fiftyTwoWeekLow}`);
                         }
                     }
                 } catch (err) {
-                    console.error(`计算 52 週最高/最低失败:`, err.message);
+                    console.error(`計算 52 週最高/最低失敗:`, err.message);
                 }
                 
+                console.log(`✅ FinMind API 成功: ${stockCodePadded} (${stockName}), 價格: ${closingPrice}`);
+                
                 return {
-                    longName: stock.Name || ticker,
-                    shortName: stock.Code || ticker,
+                    longName: stockName,
+                    shortName: stockCodePadded,
                     regularMarketPrice: closingPrice,
                     regularMarketChangePercent: changePercent,
                     trailingPE: financials.pe,
@@ -635,17 +656,17 @@ async function fetchStockData(ticker) {
                     regularMarketPreviousClose: previousClose,
                     regularMarketDayHigh: highestPrice,
                     regularMarketDayLow: lowestPrice,
-                    fiftyTwoWeekHigh: fiftyTwoWeekHigh,
-                    fiftyTwoWeekLow: fiftyTwoWeekLow
+                    fiftyTwoWeekHigh: fiftyTwoWeekHigh || closingPrice,
+                    fiftyTwoWeekLow: fiftyTwoWeekLow || closingPrice
                 };
             } else {
-                console.log(`TWSE API 未找到股票代码: ${stockCodePadded} (尝试了: ${stockCodePadded}, ${stockCode}, ${ticker.padStart(4, '0')})`);
+                console.log(`⚠️ FinMind API 未找到股票代碼: ${stockCodePadded}`);
             }
         } else {
-            console.log(`TWSE API 返回状态码: ${twseResponse.status}`);
+            console.log(`⚠️ FinMind API 返回狀態碼: ${priceResponse.status}`);
         }
     } catch (err) {
-        console.error(`TWSE API 失败:`, err.message);
+        console.error(`FinMind API 失敗:`, err.message);
     }
     
     // 方案 2: 使用 CORS 代理服务（Yahoo Finance 备用方案）
