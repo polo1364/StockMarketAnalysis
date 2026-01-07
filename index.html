@@ -599,13 +599,15 @@
                 }
             }
             
-            // 如果结果区域没有显示，尝试快速获取股票名称
+            // 如果结果区域没有显示，尝试通过后端 API 快速获取股票名称
             if (stockName === ticker) {
                 try {
-                    // 快速获取股票名称（不进行完整分析）
-                    const quote = await fetchStockData(ticker.toUpperCase().replace(/^0+/, ''));
-                    if (quote && quote.longName) {
-                        stockName = quote.longName;
+                    const response = await fetch(`${API_BASE_URL}/api/stock/${ticker.toUpperCase()}`);
+                    if (response.ok) {
+                        const quote = await response.json();
+                        if (quote && quote.longName) {
+                            stockName = quote.longName;
+                        }
                     }
                 } catch (err) {
                     console.error('獲取股票名稱失敗:', err);
@@ -803,7 +805,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        ticker: ticker.toUpperCase().replace(/^0+/, ''),
+                        ticker: ticker.toUpperCase(),
                         apiKey: apiKey
                     })
                 });

@@ -165,7 +165,9 @@ async function fetchFromFinMind(dataset, stockCode, startDate, endDate) {
 }
 
 async function fetchStockFinancials(ticker) {
-    const stockCode = ticker.replace(/^0+/, '').padStart(4, '0');
+    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
+    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
+    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
     
     try {
         const endDate = new Date();
@@ -241,7 +243,9 @@ async function fetchStockFinancials(ticker) {
 }
 
 async function fetchStockHistory(ticker, days = 30) {
-    const stockCode = ticker.replace(/^0+/, '').padStart(4, '0');
+    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
+    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
+    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
     
     try {
         const endDate = new Date();
@@ -309,7 +313,9 @@ async function fetchStockHistory(ticker, days = 30) {
 }
 
 async function fetchStockData(ticker) {
-    const stockCode = ticker.replace(/^0+/, '').padStart(4, '0');
+    // 處理股票代碼：保留 5 位數 ETF 代碼（如 00940），4 位數補零
+    const cleanTicker = ticker.replace(/\s/g, '').toUpperCase();
+    const stockCode = cleanTicker.length >= 5 ? cleanTicker : cleanTicker.replace(/^0+/, '').padStart(4, '0');
     
     try {
         const endDate = new Date();
