@@ -384,6 +384,148 @@
     </main>
 
     <script>
+        // 使用後端 API 獲取 FinMind 數據
+        
+        // ========== 後端 API 配置 ==========
+        // 後端伺服器會處理 FinMind API 調用，避免 CORS 問題
+        const API_BASE_URL = window.location.origin;
+
+        // ========== 技術指標計算函數（前端用於圖表顯示）==========
+        function calculateMA(data, period) {
+            const result = [];
+            for (let i = period - 1; i < data.length; i++) {
+                const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+                result.push(sum / period);
+            }
+            return result;
+        }
+
+        function calculateRSI(prices, period = 14) {
+            const result = [];
+            const gains = [];
+            const losses = [];
+            
+            for (let i = 1; i < prices.length; i++) {
+                const change = prices[i] - prices[i - 1];
+                gains.push(change > 0 ? change : 0);
+                losses.push(change < 0 ? -change : 0);
+            }
+            
+            let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+            let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+            
+            for (let i = period; i < gains.length; i++) {
+                avgGain = (avgGain * (period - 1) + gains[i]) / period;
+                avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+                
+                const rs = avgGain / (avgLoss || 0.0001);
+                const rsi = 100 - (100 / (1 + rs));
+                result.push(rsi);
+            }
+            
+            return result;
+        }
+
+        function calculateEMA(data, period) {
+            const multiplier = 2 / (period + 1);
+            const result = [data[0]];
+            
+            for (let i = 1; i < data.length; i++) {
+                result.push((data[i] - result[result.length - 1]) * multiplier + result[result.length - 1]);
+            }
+            
+            return result;
+        }
+
+        function calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+            const emaFast = calculateEMA(prices, fastPeriod);
+            const emaSlow = calculateEMA(prices, slowPeriod);
+            
+            const macdLine = [];
+            const minLength = Math.min(emaFast.length, emaSlow.length);
+            for (let i = 0; i < minLength; i++) {
+                macdLine.push(emaFast[emaFast.length - minLength + i] - emaSlow[emaSlow.length - minLength + i]);
+            }
+            
+            const signalLine = calculateEMA(macdLine, signalPeriod);
+            const histogram = [];
+            const signalLength = signalLine.length;
+            for (let i = 0; i < signalLength; i++) {
+                histogram.push(macdLine[macdLine.length - signalLength + i] - signalLine[i]);
+            }
+            
+            return { macd: macdLine, signal: signalLine, histogram };
+        }
+
+        function calculateBollingerBands(prices, period = 20, stdDev = 2) {
+            const ma = calculateMA(prices, period);
+            const result = { upper: [], middle: ma, lower: [] };
+            
+            for (let i = period - 1; i < prices.length; i++) {
+                const slice = prices.slice(i - period + 1, i + 1);
+                const mean = ma[ma.length - (prices.length - i)];
+                const variance = slice.reduce((sum, price) => sum + Math.pow(price - mean, 2), 0) / period;
+                const standardDeviation = Math.sqrt(variance);
+                
+                result.upper.push(mean + (stdDev * standardDeviation));
+                result.lower.push(mean - (stdDev * standardDeviation));
+            }
+            
+            return result;
+        }
+
+        function calculateTechnicalIndicators(history) {
+            if (!history || history.length < 14) {
+                return null;
+            }
+            
+            const sorted = [...history].sort((a, b) => {
+                const dateA = a.date.split('/').map(Number);
+                const dateB = b.date.split('/').map(Number);
+                const yearA = dateA[0] + 1911;
+                const yearB = dateB[0] + 1911;
+                if (yearA !== yearB) return yearA - yearB;
+                if (dateA[1] !== dateB[1]) return dateA[1] - dateB[1];
+                return dateA[2] - dateB[2];
+            });
+            
+            const closes = sorted.map(h => parseFloat(h.close) || 0);
+            const volumes = sorted.map(h => parseInt(h.volume) || 0);
+            const highs = sorted.map(h => parseFloat(h.high) || 0);
+            const lows = sorted.map(h => parseFloat(h.low) || 0);
+            
+            const ma5 = calculateMA(closes, 5);
+            const ma10 = calculateMA(closes, 10);
+            const ma20 = calculateMA(closes, 20);
+            const rsi = calculateRSI(closes, 14);
+            const macd = calculateMACD(closes);
+            const bollinger = calculateBollingerBands(closes, 20);
+            const volumeMA = calculateMA(volumes, 20);
+            
+            const support = Math.min(...lows.slice(-20));
+            const resistance = Math.max(...highs.slice(-20));
+            
+            return {
+                ma5: ma5[ma5.length - 1],
+                ma10: ma10[ma10.length - 1],
+                ma20: ma20[ma20.length - 1],
+                rsi: rsi[rsi.length - 1],
+                macd: macd.macd[macd.macd.length - 1],
+                signal: macd.signal[macd.signal.length - 1],
+                histogram: macd.histogram[macd.histogram.length - 1],
+                bollingerUpper: bollinger.upper[bollinger.upper.length - 1],
+                bollingerMiddle: bollinger.middle[bollinger.middle.length - 1],
+                bollingerLower: bollinger.lower[bollinger.lower.length - 1],
+                volumeMA: volumeMA[volumeMA.length - 1],
+                support: support,
+                resistance: resistance,
+                currentPrice: closes[closes.length - 1]
+            };
+        }
+
+        // ========== 後端 API 調用函數 ==========
+        // 所有數據獲取和 AI 分析都通過後端伺服器處理
+
         // --- 1. 狀態與初始化 ---
         let apiKey = localStorage.getItem('gemini_api_key');
         
@@ -461,23 +603,12 @@
             if (stockName === ticker) {
                 try {
                     // 快速获取股票名称（不进行完整分析）
-                    const res = await fetch('/api/analyze', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'x-api-key': apiKey 
-                        },
-                        body: JSON.stringify({ ticker, style: '價值投資' })
-                    });
-                    
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.market_data && data.market_data.name) {
-                            stockName = data.market_data.name;
-                        }
+                    const quote = await fetchStockData(ticker.toUpperCase().replace(/^0+/, ''));
+                    if (quote && quote.longName) {
+                        stockName = quote.longName;
                     }
                 } catch (err) {
-                    console.error('获取股票名称失败:', err);
+                    console.error('獲取股票名稱失敗:', err);
                 }
             }
             
@@ -663,42 +794,65 @@
             document.getElementById('analyze-btn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 分析中...';
 
             try {
-                // 發送請求到後端，使用所有風格
-                const res = await fetch('/api/analyze', {
+                // 調用後端 API 獲取股票數據和 AI 分析
+                console.log(`正在調用後端 API 分析股票: ${ticker}`);
+                
+                const response = await fetch(`${API_BASE_URL}/api/analyze`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'x-api-key': apiKey 
+                    headers: {
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ ticker: ticker.toUpperCase().replace(/^0+/, ''), styles: styles.map(s => s.value) })
+                    body: JSON.stringify({
+                        ticker: ticker.toUpperCase().replace(/^0+/, ''),
+                        apiKey: apiKey
+                    })
                 });
-
-                // 處理錯誤狀態碼
-                if (!res.ok) {
-                    const errorData = await res.json().catch(() => ({}));
-                    
-                if (res.status === 401) {
-                    alert("API Key 無效或過期，請重新設定。");
-                    showModal();
-                        return;
-                    }
-                    
-                    if (res.status === 404) {
-                        alert(errorData.analysis || `找不到股票代號 "${ticker}"，請確認代號是否正確。`);
-                        return;
-                    }
-                    
-                    if (res.status === 500) {
-                        alert(`伺服器錯誤: ${errorData.error || '請稍後再試'}`);
-                        console.error('伺服器錯誤詳情:', errorData);
-                        return;
-                    }
-                    
-                    alert(`錯誤 ${res.status}: ${errorData.error || '請稍後再試'}`);
-                    return;
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `伺服器錯誤: ${response.status}`);
                 }
-
-                const data = await res.json();
+                
+                const result = await response.json();
+                console.log('後端返回數據:', result);
+                
+                // 構建返回數據格式
+                const data = {
+                    market_data: {
+                        name: result.marketData.name,
+                        price: result.marketData.price,
+                        change: result.marketData.change,
+                        pe: result.marketData.pe ? result.marketData.pe.toFixed(2) : 'N/A',
+                        dividendYield: result.marketData.dividendYield ? result.marketData.dividendYield.toFixed(2) : 'N/A',
+                        pb: result.marketData.pb ? result.marketData.pb.toFixed(2) : 'N/A',
+                        marketCap: result.marketData.marketCap || 0,
+                        volume: result.marketData.volume,
+                        previousClose: result.marketData.previousClose,
+                        dayHigh: result.marketData.dayHigh,
+                        dayLow: result.marketData.dayLow,
+                        fiftyTwoWeekHigh: result.marketData.fiftyTwoWeekHigh,
+                        fiftyTwoWeekLow: result.marketData.fiftyTwoWeekLow,
+                        isDemo: false
+                    },
+                    technical_indicators: result.technicalIndicators,
+                    analyses: result.analyses.map((analysis, i) => ({
+                        style: result.styles[i],
+                        summary: analysis.summary || '分析中...',
+                        analysis: analysis.analysis || '分析中...',
+                        action: analysis.action || '持有',
+                        risk_level: analysis.risk_level || '中',
+                        target_price: analysis.target_price || 'N/A',
+                        stop_loss: analysis.stop_loss || 'N/A',
+                        time_horizon: analysis.time_horizon || 'N/A',
+                        position_sizing: analysis.position_sizing || 'N/A',
+                        bullish_points: analysis.bullish_points || [],
+                        bearish_points: analysis.bearish_points || [],
+                        key_levels: analysis.key_levels || {},
+                        industry_comparison: analysis.industry_comparison || 'N/A',
+                        catalyst: analysis.catalyst || 'N/A'
+                    })),
+                    history: result.history
+                };
                 
                 // 驗證數據結構
                 if (!data || !data.market_data) {
