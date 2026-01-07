@@ -464,9 +464,11 @@ ${technicalInfo}
 `;
 
         // 嘗試多個 Gemini API 端點
+        // 使用 Gemini 2.5 Flash
         const apiEndpoints = [
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
         ];
         
         let response = null;
@@ -475,6 +477,8 @@ ${technicalInfo}
         for (let i = 0; i < apiEndpoints.length; i++) {
             try {
                 const apiUrl = apiEndpoints[i];
+                console.log(`嘗試 Gemini API 端點 ${i + 1}: ${apiUrl.split('?')[0]}`);
+                
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 30000);
                 
@@ -490,14 +494,21 @@ ${technicalInfo}
                 clearTimeout(timeoutId);
                 
                 if (response.ok) {
+                    console.log(`✅ Gemini API 端點 ${i + 1} 成功`);
                     break;
                 } else {
                     const errorData = await response.json().catch(() => ({}));
-                    lastError = new Error(`Gemini API 錯誤: ${errorData.error?.message || response.statusText}`);
+                    const errorMsg = errorData.error?.message || response.statusText;
+                    console.warn(`❌ 端點 ${i + 1} 失敗: ${errorMsg}`);
+                    lastError = new Error(`Gemini API 錯誤: ${errorMsg}`);
+                    // 繼續嘗試下一個端點
+                    continue;
                 }
             } catch (err) {
                 lastError = err;
-                console.warn(`端點 ${i + 1} 失敗:`, err.message);
+                console.warn(`❌ 端點 ${i + 1} 異常:`, err.message);
+                // 繼續嘗試下一個端點
+                continue;
             }
         }
         
